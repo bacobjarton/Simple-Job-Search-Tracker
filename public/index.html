@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Job Tracker">
+<title>Job Application Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">🎯 <span>Job Tracker</span></div>
+    <nav id="sidenav"></nav>
+    <div class="sidebar-footer">
+      <button class="btn ghost sm" id="exportBtn" title="Download JSON backup">⬇ Export</button>
+      <button class="btn ghost sm" id="importBtn" title="Restore from JSON backup">⬆ Import</button>
+      <input type="file" id="importFile" accept="application/json" hidden>
+    </div>
+  </aside>
+
+  <header id="topbar">
+    <div class="topbar-title" id="pageTitle">Dashboard</div>
+    <div class="search-wrap">
+      <input id="globalSearch" type="search" placeholder="Search…  ( / )" autocomplete="off">
+      <div id="searchResults" class="search-results" hidden></div>
+    </div>
+  </header>
+
+  <main id="main"></main>
+
+  <nav id="bottomnav"></nav>
+
+  <div id="drawerOverlay" class="drawer-overlay" hidden></div>
+  <aside id="drawer" class="drawer" aria-hidden="true"></aside>
+
+  <div id="modalRoot"></div>
+  <button id="fab" class="fab" title="New Application (N)" hidden>+</button>
+  <div id="toast" class="toast" hidden></div>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
