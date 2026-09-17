@@ -25,7 +25,11 @@ const NAV = [
   { route: 'saved', label: 'Saved Jobs', ico: '🔖' },
   { route: 'networking', label: 'Networking', ico: '🤝' },
   { route: 'interviews', label: 'Interviews', ico: '🎤' },
+  { route: 'rolefit', label: 'Role Fit', ico: '🎯' },
 ];
+
+const RF_MIN_CHARS = 120, RF_MAX_CHARS = 6000;
+const RF_STREAM_ERROR = ' STREAM_ERROR';
 
 // ---------------- state ----------------
 
@@ -45,6 +49,7 @@ const S = {
   velMetric: localStorage.getItem('velMetric') || 'apps',
   velRange: localStorage.getItem('velRange') || '12w',
   velStyle: localStorage.getItem('velStyle') || 'bar',
+  rf: { text: '', output: '', status: 'idle', error: null, config: null },
   suggestCollapsed: localStorage.getItem('suggestCollapsed') === '1',
   suggestShowAll: localStorage.getItem('suggestShowAll') === '1',
 };
@@ -193,6 +198,7 @@ async function render() {
     else if (S.route === 'saved') { await loadAll(); renderSaved(main); }
     else if (S.route === 'networking') { await loadAll(); renderNetworking(main); }
     else if (S.route === 'interviews') { await loadAll(); renderInterviews(main); }
+    else if (S.route === 'rolefit') { await loadAll(); renderRoleFit(main); }
   } catch (e) {
     main.innerHTML = `<div class="empty-state">Failed to load: ${esc(e.message)}</div>`;
   }
@@ -918,6 +924,13 @@ function renderDrawer() {
       <button class="btn sm" id="savePrep" style="margin-top:8px">Save Prep Notes</button>
     </section>
 
+    ${a.fit_analysis ? `
+    <section>
+      <h3>Role Fit Read ${a.fit_analysis_date ? `<span class="muted" style="text-transform:none;letter-spacing:0">— ${fmtDate(a.fit_analysis_date)}</span>` : ''}</h3>
+      <div class="rf-result">${rfRenderResult(rfParse(a.fit_analysis))}</div>
+      <button class="btn ghost sm" id="clearFit" style="margin-top:10px">Remove this read</button>
+    </section>` : ''}
+
     <section>
       <h3>Interview Log (${rounds.length})</h3>
       <div id="roundList">
@@ -1003,6 +1016,15 @@ function renderDrawer() {
     closeDetail();
     await loadAll();
     render();
+  };
+
+  if ($('#clearFit')) $('#clearFit').onclick = async () => {
+    if (!confirm('Remove the saved role fit read from this application?')) return;
+    const updated = await api('PUT', '/api/applications/' + a.id, { fit_analysis: null, fit_analysis_date: null });
+    const i = S.apps.findIndex(x => x.id === a.id);
+    if (i >= 0) S.apps[i] = updated;
+    toast('Read removed');
+    renderDrawer();
   };
 
   $('#savePrep').onclick = async () => {
@@ -1378,6 +1400,217 @@ function openSavedModal(saved) {
     };
     setTimeout(() => $('#sjCompany').focus(), 50);
   });
+}
+
+// ---------------- role fit analyzer ----------------
+
+// Parses the analyzer's plain-text contract. Runs on every streamed chunk, so
+// it has to tolerate a half-written response.
+function rfParse(raw) {
+  const blocks = [];
+  let verdict = null, summaryParts = [], readingSummary = false;
+  for (const line of raw.split('\n')) {
+    const t = line.trim();
+    if (t.toUpperCase().startsWith('VERDICT:')) { verdict = t.slice(8).trim(); readingSummary = false; continue; }
+    if (t.toUpperCase().startsWith('SUMMARY:')) { summaryParts.push(t.slice(8).trim()); readingSummary = true; continue; }
+    if (t.startsWith('##')) { readingSummary = false; blocks.push({ kind: 'heading', text: t.replace(/^#+\s*/, '') }); continue; }
+    if (t.startsWith('- ') || t.startsWith('* ')) {
+      readingSummary = false;
+      const item = t.slice(2).trim();
+      const last = blocks[blocks.length - 1];
+      if (last && last.kind === 'list') last.items.push(item);
+      else blocks.push({ kind: 'list', items: [item] });
+      continue;
+    }
+    if (!t) { readingSummary = false; continue; }
+    if (readingSummary) { summaryParts.push(t); continue; }
+    const last = blocks[blocks.length - 1];
+    if (last && last.kind === 'paragraph') last.text += ' ' + t;
+    else blocks.push({ kind: 'paragraph', text: t });
+  }
+  return { verdict, summary: summaryParts.join(' '), blocks };
+}
+
+// Escape first, then promote **bold**, so pasted text can never inject markup.
+function rfInline(text) {
+  return esc(text).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+}
+
+function rfVerdictColor(v) {
+  const s = (v || '').toLowerCase();
+  if (s.startsWith('strong') || s.startsWith('solid')) return '#22c55e';
+  if (s.startsWith('partial')) return '#f59e0b';
+  if (s.startsWith('weak')) return '#f97316';
+  if (s.startsWith('not a fit')) return '#ef4444';
+  return '#64748b';
+}
+
+function rfRenderResult(parsed) {
+  if (!parsed) return '';
+  return `
+    ${parsed.verdict ? badge(parsed.verdict, rfVerdictColor(parsed.verdict)) : ''}
+    ${parsed.summary ? `<p class="rf-summary">${rfInline(parsed.summary)}</p>` : ''}
+    ${parsed.blocks.map(b => {
+      if (b.kind === 'heading') return `<h4 class="rf-heading">${esc(b.text)}</h4>`;
+      if (b.kind === 'list') return `<ul class="rf-list">${b.items.map(i => `<li>${rfInline(i)}</li>`).join('')}</ul>`;
+      return `<p class="rf-para">${rfInline(b.text)}</p>`;
+    }).join('')}`;
+}
+
+async function renderRoleFit(main) {
+  if (!S.rf.config) {
+    try { S.rf.config = await api('GET', '/api/analyze/status'); }
+    catch (e) { S.rf.config = { configured: false, has_profile: false, has_key: false }; }
+  }
+  const cfg = S.rf.config;
+  const rf = S.rf;
+
+  // Anything analyzed can be filed against an application or a saved job.
+  const targets = [
+    ...S.apps.map(a => ({ kind: 'app', id: a.id, label: `${a.company} — ${a.role}` })),
+    ...S.saved.map(j => ({ kind: 'saved', id: j.id, label: `${j.company} — ${j.role} (saved)` })),
+  ];
+
+  main.innerHTML = `
+    <div class="rf-grid">
+      <div class="panel">
+        <h3>Job description</h3>
+        <p class="muted" style="margin:-4px 0 10px;font-size:12.5px">
+          Paste the posting. The analyzer reads it against your background and is told to name the gaps as plainly as the matches.
+        </p>
+        ${!cfg.configured ? `
+          <div class="rf-unconfigured">
+            <strong>Analyzer not configured.</strong>
+            ${!cfg.has_profile ? '<div>Missing <code>profile.js</code> — it must export <code>buildSystemPrompt()</code>.</div>' : ''}
+            ${!cfg.has_key ? '<div>Missing the <code>ANTHROPIC_API_KEY</code> environment variable.</div>' : ''}
+          </div>` : ''}
+        <textarea id="rfInput" rows="16" placeholder="Paste the full job description here, including responsibilities and requirements."
+          ${cfg.configured ? '' : 'disabled'}>${esc(rf.text)}</textarea>
+        <div class="rf-meta">
+          <span id="rfCount" class="muted"></span>
+          <span class="muted">Ctrl+Enter to run</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn" id="rfRun" ${cfg.configured ? '' : 'disabled'}>Analyze fit</button>
+          <button class="btn ghost" id="rfClear">Clear</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>The read</h3>
+        <div id="rfResult" class="rf-result" aria-live="polite"></div>
+        <div id="rfSave"></div>
+      </div>
+    </div>`;
+
+  const input = $('#rfInput'), result = $('#rfResult'), saveBox = $('#rfSave');
+
+  const paintCount = () => {
+    const n = input.value.trim().length;
+    const over = n > RF_MAX_CHARS;
+    $('#rfCount').textContent = `${n.toLocaleString()} / ${RF_MAX_CHARS.toLocaleString()} characters`;
+    $('#rfCount').style.color = over ? '#fb923c' : '';
+  };
+
+  const paintSave = () => {
+    if (rf.status !== 'done' || !targets.length) { saveBox.innerHTML = ''; return; }
+    saveBox.innerHTML = `
+      <div class="rf-save">
+        <label class="fld" style="flex:1;min-width:200px">Save this read to
+          <select id="rfTarget">
+            <option value="">Choose an application or saved job…</option>
+            ${targets.map(t => `<option value="${t.kind}:${t.id}">${esc(t.label)}</option>`).join('')}
+          </select>
+        </label>
+        <button class="btn sm" id="rfSaveBtn">Save</button>
+      </div>`;
+    $('#rfSaveBtn').onclick = async () => {
+      const v = $('#rfTarget').value;
+      if (!v) return toast('Pick where to save it first');
+      const [kind, id] = v.split(':');
+      const url = (kind === 'app' ? '/api/applications/' : '/api/saved-jobs/') + id;
+      await api('PUT', url, { fit_analysis: rf.output, fit_analysis_date: todayISO() });
+      toast('Saved to record');
+      await loadAll();
+    };
+  };
+
+  const paint = () => {
+    if (rf.status === 'idle' && !rf.output) {
+      result.innerHTML = '<p class="muted">The assessment appears here: an overall fit read, where the role lines up with what you have done, where you would be ramping, and what to raise first.</p>';
+    } else if (rf.status === 'loading') {
+      result.innerHTML = '<p class="muted">Reading the posting…</p>';
+    } else {
+      result.innerHTML = rfRenderResult(rfParse(rf.output));
+    }
+    if (rf.error) {
+      result.innerHTML += `<div class="rf-error"><strong>Not this time.</strong> ${esc(rf.error)}</div>`;
+    }
+    paintSave();
+  };
+
+  input.oninput = () => { rf.text = input.value; paintCount(); };
+  input.onkeydown = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run(); } };
+  $('#rfClear').onclick = () => {
+    Object.assign(rf, { text: '', output: '', status: 'idle', error: null });
+    input.value = ''; paintCount(); paint();
+  };
+  $('#rfRun').onclick = () => run();
+
+  async function run() {
+    const text = input.value.trim();
+    if (!text) return toast('Paste a job description first');
+    if (text.length > RF_MAX_CHARS) return toast('That posting is over the character limit');
+    if (text.length < RF_MIN_CHARS) return toast('That is too short to read as a job description');
+
+    Object.assign(rf, { text, output: '', status: 'loading', error: null });
+    $('#rfRun').disabled = true;
+    paint();
+
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobDescription: text }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        rf.error = (data && data.error) || 'Something went wrong. Try again.';
+        rf.status = 'error';
+        paint();
+        return;
+      }
+      rf.status = 'streaming';
+      const reader = res.body.getReader(), decoder = new TextDecoder();
+      let acc = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(value, { stream: true });
+        if (acc.endsWith(RF_STREAM_ERROR)) {
+          rf.output = acc.slice(0, -RF_STREAM_ERROR.length);
+          rf.error = 'The response was cut off partway through. What is above is incomplete.';
+          rf.status = 'error';
+          paint();
+          return;
+        }
+        rf.output = acc;
+        paint();
+      }
+      rf.status = 'done';
+      paint();
+    } catch (e) {
+      rf.error = 'Could not reach the analyzer. Check the connection and try again.';
+      rf.status = 'error';
+      paint();
+    } finally {
+      const btn = $('#rfRun');
+      if (btn) btn.disabled = !cfg.configured;
+    }
+  }
+
+  paintCount();
+  paint();
 }
 
 // ---------------- networking tab ----------------

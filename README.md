@@ -26,6 +26,8 @@ On first run the database is created at `./data/tracker.db` and seeded with the 
 
 **Saved Jobs** — bookmark postings to apply to later; one click converts a saved job into a tracked application.
 
+**Role Fit** — paste a job description and get a streaming, calibrated read on how well your background fits it: a verdict, where you align, where you would be ramping, and what to raise in a first conversation. It runs on the Anthropic API against a fixed record of your background, so it cannot invent experience you do not have, and it is instructed to name a bad match as a bad match. Any read can be filed against an application or a saved job. Off by default — see setup below.
+
 **Throughout** — global search across every record type with keyboard navigation, `N` / `/` keyboard shortcuts, JSON export/import for backups, and an installable PWA manifest.
 
 ## Architecture
@@ -48,6 +50,7 @@ REST under `/api`:
 - `GET/POST /api/networking`, `GET/PUT/DELETE /api/networking/:id`
 - `GET/POST /api/interviews`, `GET/PUT/DELETE /api/interviews/:id`
 - `GET/POST /api/saved-jobs`, `PUT/DELETE /api/saved-jobs/:id`, `POST /api/saved-jobs/:id/apply`
+- `GET /api/analyze/status`, `POST /api/analyze` — Role Fit analyzer (streams `text/plain`)
 - `GET /api/dashboard` — every summary statistic in one call
 - `GET /api/export` / `POST /api/import` — full JSON backup and restore
 
@@ -60,6 +63,15 @@ The included `Dockerfile` runs anywhere containers do. On Railway:
 1. Create a project from this repo — the Dockerfile is detected automatically.
 2. Add a volume mounted at `/data` so the SQLite file survives deploys.
 3. Generate a domain. `PORT` is read from the environment and defaults to 3000.
+
+### Role Fit analyzer
+
+The analyzer needs two things, and stays disabled until it has both:
+
+1. **A profile.** Copy `profile.example.js` to `profile.js` and fill in your own background. The only required export is `buildSystemPrompt()`. Your real `profile.js` is gitignored.
+2. **An API key.** Set `ANTHROPIC_API_KEY` ([console.anthropic.com](https://console.anthropic.com)).
+
+The Role Fit page tells you which of the two is missing. Requests are capped at 30 per hour as a cost guard, and pasted postings are treated as untrusted data, so instructions hidden inside a job description are ignored rather than followed.
 
 ### Password protection
 

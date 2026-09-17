@@ -100,13 +100,23 @@ const intCols = db.prepare('PRAGMA table_info(interview_rounds)').all().map(c =>
 if (!intCols.includes('interview_time')) {
   db.exec('ALTER TABLE interview_rounds ADD COLUMN interview_time TEXT');
 }
+const appCols = db.prepare('PRAGMA table_info(applications)').all().map(c => c.name);
+if (!appCols.includes('fit_analysis')) {
+  db.exec('ALTER TABLE applications ADD COLUMN fit_analysis TEXT');
+  db.exec('ALTER TABLE applications ADD COLUMN fit_analysis_date TEXT');
+}
+const savedCols = db.prepare('PRAGMA table_info(saved_jobs)').all().map(c => c.name);
+if (!savedCols.includes('fit_analysis')) {
+  db.exec('ALTER TABLE saved_jobs ADD COLUMN fit_analysis TEXT');
+  db.exec('ALTER TABLE saved_jobs ADD COLUMN fit_analysis_date TEXT');
+}
 
 // ---------- field definitions / row conversion ----------
 
-const APP_FIELDS = ['company','role','applied_date','priority','location_type','salary_range','source','interview_landed','status','recruiter_contact','followup_date','notes','interview_prep_notes','tags','job_link'];
+const APP_FIELDS = ['company','role','applied_date','priority','location_type','salary_range','source','interview_landed','status','recruiter_contact','followup_date','notes','interview_prep_notes','tags','job_link','fit_analysis','fit_analysis_date'];
 const NET_FIELDS = ['name','company','title','how_connected','last_contact_date','followup_date','referred_job','job_link','notes','status'];
 const INT_FIELDS = ['application_id','company','role','round_number','interview_type','interview_date','interview_time','duration_minutes','interviewers','interviewer_titles','notes','outcome'];
-const SAVED_FIELDS = ['company','role','salary_range','location_type','source','priority','job_link','notes','saved_date'];
+const SAVED_FIELDS = ['company','role','salary_range','location_type','source','priority','job_link','notes','saved_date','fit_analysis','fit_analysis_date'];
 
 function appToDb(obj) {
   const out = {};
@@ -421,6 +431,130 @@ app.post('/api/saved-jobs/:id/apply', (req, res) => {
   logActivity(info.lastInsertRowid, 'Applied', `Applied to ${b.role} at ${b.company}`, b.applied_date);
   db.prepare('DELETE FROM saved_jobs WHERE id=?').run(saved.id);
   res.status(201).json(appFromDb(db.prepare('SELECT * FROM applications WHERE id=?').get(info.lastInsertRowid)));
+});
+
+// --- role fit analyzer ---
+//
+// Streams a fit assessment for a pasted job description. The personal profile
+// and system prompt live in ./profile.js, which is intentionally absent from
+// the public repo — without it the endpoint reports itself unconfigured.
+
+const ANALYZE_MIN_CHARS = 120;
+const ANALYZE_MAX_CHARS = 6000;
+const ANALYZE_MODEL = 'claude-sonnet-5';
+const STREAM_ERROR_SENTINEL = ' STREAM_ERROR';
+// Cost guard only: this is a single-user app behind auth, not a public form.
+const ANALYZE_WINDOW_MS = 60 * 60 * 1000;
+const ANALYZE_MAX_PER_WINDOW = 30;
+let analyzeHits = [];
+
+function loadAnalyzerProfile() {
+  try {
+    return require('./profile.js');
+  } catch (e) {
+    return null;
+  }
+}
+
+app.get('/api/analyze/status', (req, res) => {
+  res.json({
+    configured: !!(process.env.ANTHROPIC_API_KEY && loadAnalyzerProfile()),
+    has_profile: !!loadAnalyzerProfile(),
+    has_key: !!process.env.ANTHROPIC_API_KEY,
+    min_chars: ANALYZE_MIN_CHARS,
+    max_chars: ANALYZE_MAX_CHARS,
+  });
+});
+
+app.post('/api/analyze', async (req, res) => {
+  const profile = loadAnalyzerProfile();
+  if (!profile) {
+    return res.status(503).json({ error: 'No profile.js found. Add one that exports buildSystemPrompt() to enable the analyzer.' });
+  }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return res.status(503).json({ error: 'ANTHROPIC_API_KEY is not set, so the analyzer cannot run.' });
+  }
+
+  let Anthropic;
+  try {
+    Anthropic = require('@anthropic-ai/sdk');
+  } catch (e) {
+    return res.status(503).json({ error: 'The @anthropic-ai/sdk package is not installed. Run npm install.' });
+  }
+
+  const raw = req.body && typeof req.body.jobDescription === 'string' ? req.body.jobDescription.trim() : '';
+  if (!raw) return res.status(400).json({ error: 'Paste a job description first.' });
+  if (raw.length < ANALYZE_MIN_CHARS) {
+    return res.status(400).json({ error: 'That is too short to read as a job description. Paste the full posting, including responsibilities and requirements.' });
+  }
+  if (raw.length > ANALYZE_MAX_CHARS) {
+    return res.status(400).json({ error: `That posting is ${raw.length.toLocaleString()} characters and the limit is ${ANALYZE_MAX_CHARS.toLocaleString()}. Trim it to the responsibilities and requirements.` });
+  }
+
+  const now = Date.now();
+  analyzeHits = analyzeHits.filter(t => t > now - ANALYZE_WINDOW_MS);
+  if (analyzeHits.length >= ANALYZE_MAX_PER_WINDOW) {
+    const mins = Math.ceil((analyzeHits[0] + ANALYZE_WINDOW_MS - now) / 60000);
+    return res.status(429).json({ error: `That is ${ANALYZE_MAX_PER_WINDOW} analyses this hour. Try again in about ${mins} minute${mins === 1 ? '' : 's'}.` });
+  }
+  analyzeHits.push(now);
+
+  // The delimiter is the trust boundary. Strip any attempt to forge it.
+  const sanitized = raw.replace(/<\/?job_description>/gi, '');
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  let stream, iterator, first;
+  try {
+    stream = client.messages.stream({
+      model: ANALYZE_MODEL,
+      max_tokens: 1400,
+      thinking: { type: 'disabled' },
+      output_config: { effort: 'medium' },
+      system: profile.buildSystemPrompt(),
+      messages: [{
+        role: 'user',
+        content: `Analyze this job description for fit.\n\n<job_description>\n${sanitized}\n</job_description>`,
+      }],
+    });
+    iterator = stream[Symbol.asyncIterator]();
+    // Await the first event so auth and validation failures surface as a clean
+    // JSON error instead of a broken half-stream in the UI.
+    first = await iterator.next();
+  } catch (e) {
+    console.error('analyze: model call failed', e.message);
+    const status = e && e.status === 401 ? 401 : 502;
+    return res.status(status).json({
+      error: status === 401
+        ? 'The Anthropic API key was rejected. Check ANTHROPIC_API_KEY.'
+        : 'The model call failed. Try again in a moment.',
+    });
+  }
+
+  res.status(200).set({
+    'content-type': 'text/plain; charset=utf-8',
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+  });
+
+  const push = (event) => {
+    if (event && event.type === 'content_block_delta' && event.delta && event.delta.type === 'text_delta') {
+      res.write(event.delta.text);
+    }
+  };
+
+  try {
+    if (!first.done) push(first.value);
+    for (;;) {
+      const next = await iterator.next();
+      if (next.done) break;
+      push(next.value);
+    }
+  } catch (e) {
+    console.error('analyze: stream broke', e.message);
+    res.write(STREAM_ERROR_SENTINEL);
+  } finally {
+    res.end();
+  }
 });
 
 // --- dashboard ---

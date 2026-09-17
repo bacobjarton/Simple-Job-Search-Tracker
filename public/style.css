@@ -393,6 +393,41 @@ mark { background: rgba(99,102,241,.4); color: inherit; border-radius: 3px; padd
 }
 .dup-warn .dup-item { color: var(--text); font-weight: 500; margin-top: 3px; }
 
+/* ---------- role fit analyzer ---------- */
+
+.rf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.rf-meta { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; font-size: 12px; }
+.rf-result { min-height: 220px; }
+.rf-summary { font-size: 15px; color: var(--text); margin: 14px 0 0; }
+.rf-heading {
+  margin: 20px 0 0; font-size: 11.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .12em; color: var(--accent-hover);
+}
+.rf-list { list-style: none; padding: 0; margin: 10px 0 0; }
+.rf-list li { position: relative; padding-left: 18px; margin-bottom: 8px; font-size: 13.5px; }
+.rf-list li::before {
+  content: ''; position: absolute; left: 0; top: .55em;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+}
+.rf-list strong, .rf-summary strong, .rf-para strong { color: var(--text); font-weight: 700; }
+.rf-para { margin: 10px 0 0; font-size: 13.5px; }
+.rf-error {
+  margin-top: 14px; padding: 10px 12px; font-size: 13px;
+  background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.4);
+  border-radius: 8px; color: #fca5a5;
+}
+.rf-error strong { color: #fecaca; }
+.rf-unconfigured {
+  margin-bottom: 12px; padding: 10px 12px; font-size: 12.5px; line-height: 1.6;
+  background: rgba(249,115,22,.1); border: 1px solid rgba(249,115,22,.4);
+  border-radius: 8px; color: #fdba74;
+}
+.rf-unconfigured code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
+.rf-save {
+  display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;
+  margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border);
+}
+
 /* ---------- misc ---------- */
 
 .fab {
@@ -438,6 +473,7 @@ mark { background: rgba(99,102,241,.4); color: inherit; border-radius: 3px; padd
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .rates-row { grid-template-columns: 1fr; }
   .bd-grid { grid-template-columns: 1fr; }
+  .rf-grid { grid-template-columns: 1fr; }
   .field-grid, .modal .form-grid { grid-template-columns: 1fr; }
   .drawer { width: 100vw !important; border-left: none; }
   .drawer-resize, #drawerExpand { display: none; }

@@ -4,3 +4,4 @@ data/
 *.db-shm
 *.db-wal
 railway-import.json
+profile.js
