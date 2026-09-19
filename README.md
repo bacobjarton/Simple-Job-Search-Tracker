@@ -51,6 +51,7 @@ REST under `/api`:
 - `GET/POST /api/interviews`, `GET/PUT/DELETE /api/interviews/:id`
 - `GET/POST /api/saved-jobs`, `PUT/DELETE /api/saved-jobs/:id`, `POST /api/saved-jobs/:id/apply`
 - `GET /api/analyze/status`, `POST /api/analyze` — Role Fit analyzer (streams `text/plain`)
+- `GET/PUT/DELETE /api/profile` — the background the analyzer reads against
 - `GET /api/dashboard` — every summary statistic in one call
 - `GET /api/export` / `POST /api/import` — full JSON backup and restore
 
@@ -68,10 +69,16 @@ The included `Dockerfile` runs anywhere containers do. On Railway:
 
 The analyzer needs two things, and stays disabled until it has both:
 
-1. **A profile.** Copy `profile.example.js` to `profile.js` and fill in your own background. The only required export is `buildSystemPrompt()`. Your real `profile.js` is gitignored.
+1. **Your background.** Open the Role Fit page and paste your resume into the setup box, then save. No files, no restart, and it works the same on a deployed instance as it does locally. It is stored in your own database, never in the repo, and you can edit or remove it from the same page later.
 2. **An API key.** Set `ANTHROPIC_API_KEY` ([console.anthropic.com](https://console.anthropic.com)).
 
-The Role Fit page tells you which of the two is missing. Requests are capped at 30 per hour as a cost guard, and pasted postings are treated as untrusted data, so instructions hidden inside a job description are ignored rather than followed.
+The Role Fit page tells you which of the two is missing.
+
+Anything missing from your background shows up as a gap rather than being assumed, which is the point: the analyzer is told to treat what you give it as the complete record so it cannot invent experience you do not have.
+
+**Prefer config as code?** Copy `profile.example.js` to `profile.js` and export `buildSystemPrompt()`. A `profile.js` always takes precedence over the background saved in the app, is picked up on edit without restarting the server, and is gitignored. If it fails to load, the Role Fit page shows the actual reason instead of silently looking unconfigured.
+
+Requests are capped at 30 per hour as a cost guard, and pasted postings are treated as untrusted data, so instructions hidden inside a job description are ignored rather than followed.
 
 ### Password protection
 

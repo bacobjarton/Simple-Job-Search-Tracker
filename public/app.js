@@ -49,7 +49,7 @@ const S = {
   velMetric: localStorage.getItem('velMetric') || 'apps',
   velRange: localStorage.getItem('velRange') || '12w',
   velStyle: localStorage.getItem('velStyle') || 'bar',
-  rf: { text: '', output: '', status: 'idle', error: null, config: null },
+  rf: { text: '', output: '', status: 'idle', error: null, config: null, profile: null, editingProfile: false },
   suggestCollapsed: localStorage.getItem('suggestCollapsed') === '1',
   suggestShowAll: localStorage.getItem('suggestShowAll') === '1',
 };
@@ -1457,10 +1457,61 @@ function rfRenderResult(parsed) {
     }).join('')}`;
 }
 
+// The setup panel doubles as the background editor: it is where someone with a
+// fresh clone gets the analyzer working, and where they revise it later.
+function rfProfilePanel(cfg, rf) {
+  const fileBased = cfg.profile_source === 'file';
+  const saved = rf.profile || {};
+  const editing = rf.editingProfile || (!cfg.has_profile && !fileBased);
+  const out = [];
+
+  if (cfg.profile_error) {
+    out.push(`<div class="rf-unconfigured">
+      <strong>profile.js could not be loaded.</strong>
+      <div>${esc(cfg.profile_error)}</div>
+      <div class="muted">Fix the file, or save a background below and the app will use that instead.</div>
+    </div>`);
+  }
+  if (!cfg.has_key) {
+    out.push(`<div class="rf-unconfigured">
+      <strong>No API key yet.</strong>
+      <div>Set <code>ANTHROPIC_API_KEY</code> in the environment and reload. Keys come from
+        <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>.</div>
+    </div>`);
+  }
+  if (fileBased) {
+    out.push(`<div class="rf-profile-note muted">Reading your background from <code>profile.js</code>, which takes precedence over anything saved in the app.</div>`);
+  } else if (cfg.has_profile && !editing) {
+    out.push(`<div class="rf-profile-note">
+      <span>Background saved${saved.updated_at ? ` · updated ${fmtDate(saved.updated_at.slice(0, 10))}` : ''}.</span>
+      <button class="btn ghost sm" id="rfpEdit">Edit background</button>
+    </div>`);
+  }
+  if (editing && !fileBased) {
+    out.push(`<div class="rf-setup">
+      <strong>${cfg.has_profile ? 'Your background' : 'Add your background to get started'}</strong>
+      <p class="muted">Paste your resume, or write it out: the roles you have held, what you actually did, numbers where you have them, and the tools you have genuinely used. The analyzer treats this as the complete record, so anything missing here shows up as a gap rather than being assumed.</p>
+      <input type="text" id="rfpName" placeholder="Your name (optional)" value="${esc(saved.name || '')}">
+      <textarea id="rfpText" rows="12" placeholder="Paste your resume here, or write a summary of your background.">${esc(saved.profile_text || '')}</textarea>
+      <div class="rf-meta"><span id="rfpCount" class="muted"></span><span class="muted">Stored in your database, never committed</span></div>
+      <div class="rf-setup-actions">
+        <button class="btn" id="rfpSave">Save background</button>
+        ${cfg.has_profile ? '<button class="btn ghost" id="rfpCancel">Cancel</button>' : ''}
+        ${cfg.has_profile ? '<button class="btn danger sm" id="rfpDelete">Remove</button>' : ''}
+      </div>
+    </div>`);
+  }
+  return out.join('');
+}
+
 async function renderRoleFit(main) {
   if (!S.rf.config) {
     try { S.rf.config = await api('GET', '/api/analyze/status'); }
     catch (e) { S.rf.config = { configured: false, has_profile: false, has_key: false }; }
+  }
+  if (!S.rf.profile) {
+    try { S.rf.profile = await api('GET', '/api/profile'); }
+    catch (e) { S.rf.profile = { profile_text: '', name: null }; }
   }
   const cfg = S.rf.config;
   const rf = S.rf;
@@ -1478,12 +1529,7 @@ async function renderRoleFit(main) {
         <p class="muted" style="margin:-4px 0 10px;font-size:12.5px">
           Paste the posting. The analyzer reads it against your background and is told to name the gaps as plainly as the matches.
         </p>
-        ${!cfg.configured ? `
-          <div class="rf-unconfigured">
-            <strong>Analyzer not configured.</strong>
-            ${!cfg.has_profile ? '<div>Missing <code>profile.js</code> — it must export <code>buildSystemPrompt()</code>.</div>' : ''}
-            ${!cfg.has_key ? '<div>Missing the <code>ANTHROPIC_API_KEY</code> environment variable.</div>' : ''}
-          </div>` : ''}
+        ${rfProfilePanel(cfg, rf)}
         <textarea id="rfInput" rows="16" placeholder="Paste the full job description here, including responsibilities and requirements."
           ${cfg.configured ? '' : 'disabled'}>${esc(rf.text)}</textarea>
         <div class="rf-meta">
@@ -1504,6 +1550,49 @@ async function renderRoleFit(main) {
     </div>`;
 
   const input = $('#rfInput'), result = $('#rfResult'), saveBox = $('#rfSave');
+
+  // --- background editor ---
+  const refreshProfile = async () => {
+    S.rf.config = await api('GET', '/api/analyze/status');
+    S.rf.profile = await api('GET', '/api/profile');
+  };
+  const pText = $('#rfpText');
+  if (pText) {
+    const pMin = cfg.profile_min_chars || 200;
+    const pCount = () => {
+      const n = pText.value.trim().length;
+      $('#rfpCount').textContent = n < pMin
+        ? `${n.toLocaleString()} characters, ${pMin} minimum`
+        : `${n.toLocaleString()} characters`;
+      $('#rfpCount').style.color = n && n < pMin ? '#fb923c' : '';
+    };
+    pText.oninput = pCount;
+    pCount();
+  }
+  const bind = (sel, fn) => { const el = $(sel); if (el) el.onclick = fn; };
+  bind('#rfpEdit', () => { rf.editingProfile = true; renderRoleFit(main); });
+  bind('#rfpCancel', () => { rf.editingProfile = false; renderRoleFit(main); });
+  bind('#rfpSave', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      await api('PUT', '/api/profile', { profile_text: pText.value, name: $('#rfpName').value });
+      await refreshProfile();
+      rf.editingProfile = false;
+      toast('Background saved');
+      renderRoleFit(main);
+    } catch (err) {
+      btn.disabled = false; // api() has already surfaced the reason
+    }
+  });
+  bind('#rfpDelete', async () => {
+    if (!confirm('Remove the saved background? The analyzer stops working until you add one again.')) return;
+    await api('DELETE', '/api/profile');
+    await refreshProfile();
+    rf.editingProfile = false;
+    toast('Background removed');
+    renderRoleFit(main);
+  });
 
   const paintCount = () => {
     const n = input.value.trim().length;

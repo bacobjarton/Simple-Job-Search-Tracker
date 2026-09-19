@@ -423,6 +423,26 @@ mark { background: rgba(99,102,241,.4); color: inherit; border-radius: 3px; padd
   border-radius: 8px; color: #fdba74;
 }
 .rf-unconfigured code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
+.rf-unconfigured a { color: inherit; text-decoration: underline; }
+
+.rf-profile-note {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 12px; padding: 8px 12px; font-size: 12.5px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+}
+.rf-profile-note code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; }
+.rf-profile-note button { margin-left: auto; }
+
+.rf-setup {
+  margin-bottom: 14px; padding: 14px; border-radius: var(--radius);
+  background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.35);
+}
+.rf-setup strong { display: block; font-size: 13.5px; margin-bottom: 6px; }
+.rf-setup p { margin: 0 0 10px; font-size: 12.5px; line-height: 1.6; }
+.rf-setup input[type="text"] { width: 100%; margin-bottom: 8px; }
+.rf-setup textarea { width: 100%; min-height: 160px; }
+.rf-setup-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.rf-setup-actions .danger { margin-left: auto; }
 .rf-save {
   display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;
   margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border);

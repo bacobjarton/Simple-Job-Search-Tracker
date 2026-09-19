@@ -1,9 +1,13 @@
 /*
  * Example profile for the Role Fit analyzer.
  *
- * Copy this to `profile.js` and replace the content with your own background,
- * then set ANTHROPIC_API_KEY. Without both, the Role Fit page renders an
- * "analyzer not configured" state and the endpoint returns 503.
+ * You do not need this file. The simplest way to set the analyzer up is to open
+ * the Role Fit page and paste your resume into the setup box, which works on a
+ * deployed instance too. This file is the config as code alternative.
+ *
+ * Copy it to `profile.js` and replace the content with your own background,
+ * then set ANTHROPIC_API_KEY. A `profile.js` always takes precedence over the
+ * background saved in the app, and is re-read on edit without a restart.
  *
  * The only required export is `buildSystemPrompt()`, which returns the system
  * prompt string. Everything else here is just a way of organizing the facts
