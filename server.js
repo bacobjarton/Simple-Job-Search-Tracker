@@ -159,7 +159,28 @@ function intToDb(obj) {
   return out;
 }
 
+// "Today" must be the user's today, not the server's. Hosts commonly run UTC,
+// which is already tomorrow for most of the Americas' evening — an interview
+// dated today would then match neither today's actions nor upcoming, and
+// silently vanish from the dashboard. Set APP_TIMEZONE (an IANA name such as
+// America/Los_Angeles) to pin it; falls back to TZ, then to server local time.
+const APP_TIMEZONE = (() => {
+  const wanted = process.env.APP_TIMEZONE || process.env.TZ || null;
+  if (!wanted) return null;
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: wanted }).format(new Date());
+    return wanted;
+  } catch (e) {
+    console.warn(`Ignoring invalid APP_TIMEZONE/TZ "${wanted}"; using server local time.`);
+    return null;
+  }
+})();
+
 function todayISO() {
+  if (APP_TIMEZONE) {
+    // en-CA renders as YYYY-MM-DD, which is the format stored everywhere here.
+    return new Intl.DateTimeFormat('en-CA', { timeZone: APP_TIMEZONE }).format(new Date());
+  }
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -929,7 +950,8 @@ app.get('/api/dashboard', (req, res) => {
       awaiting_reply: contacts.filter(c => c.status === 'Awaiting Reply').length,
       referred: contacts.filter(c => c.referred_job).length
     },
-    today
+    today,
+    timezone: APP_TIMEZONE || 'server local'
   });
 });
 

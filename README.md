@@ -80,6 +80,12 @@ Anything missing from your background shows up as a gap rather than being assume
 
 Requests are capped at 30 per hour as a cost guard, and pasted postings are treated as untrusted data, so instructions hidden inside a job description are ignored rather than followed.
 
+### Timezone
+
+The dashboard's notion of "today" drives today's interviews, overdue follow-ups, and the suggestion engine. Hosts usually run UTC, which is already tomorrow for much of the Americas in the evening, so an item dated today can fall outside both "today" and "upcoming".
+
+Set `APP_TIMEZONE` to an IANA name (for example `America/Los_Angeles`) so the server uses your day, not the host's. It falls back to `TZ`, then to server local time, and `GET /api/dashboard` reports the zone it resolved.
+
 ### Password protection
 
 The app has no login by default. Set `AUTH_PASSWORD` (and optionally `AUTH_USER`, default `admin`) to require HTTP Basic Auth on every request — worth doing before putting a real job search on the public internet.
