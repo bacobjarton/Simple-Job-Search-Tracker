@@ -258,6 +258,7 @@ function renderDashboard(main) {
   main.innerHTML = `
     <div class="stat-grid">
       <div class="stat-card" data-goto="applications" title="View all applications"><div class="num">${d.totals.applied}</div><div class="lbl">Total Applied</div></div>
+      <div class="stat-card" data-goto="applications" data-fstatus="In Progress" data-finterview="yes" title="View the companies you are actively interviewing with"><div class="num" style="color:#2dd4bf">${d.totals.actively_interviewing ?? 0}</div><div class="lbl">Actively Interviewing</div></div>
       <div class="stat-card" data-goto="applications" data-finterview="yes" title="View applications with interviews"><div class="num" style="color:#22c55e">${d.totals.companies_interviewed ?? d.totals.interviews_landed}</div><div class="lbl">Companies Interviewed</div></div>
       <div class="stat-card" data-goto="interviews" title="View interview log"><div class="num" style="color:#818cf8">${d.totals.interviews_completed ?? 0}</div><div class="lbl">Interviews Completed</div></div>
       <div class="stat-card" data-goto="applications" data-fstatus="In Progress" title="View in-progress applications"><div class="num" style="color:#3b82f6">${d.totals.in_progress}</div><div class="lbl">In Progress</div></div>

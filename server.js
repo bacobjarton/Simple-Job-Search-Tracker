@@ -772,6 +772,11 @@ app.get('/api/dashboard', (req, res) => {
   const companiesInterviewed = new Set(
     apps.filter(a => a.interview_landed).map(a => (a.company || '').trim().toLowerCase())
   ).size;
+  // Live pipeline: distinct companies with an interview landed that are still open.
+  const activelyInterviewing = new Set(
+    apps.filter(a => a.interview_landed && a.status === 'In Progress')
+      .map(a => (a.company || '').trim().toLowerCase())
+  ).size;
   // Completed = already happened: dated in the past, or undated with a recorded outcome.
   const interviewsCompleted = rounds.filter(r =>
     (r.interview_date && r.interview_date < today) || (!r.interview_date && r.outcome)
@@ -909,6 +914,7 @@ app.get('/api/dashboard', (req, res) => {
       applied: total,
       interviews_landed: interviewsLanded,
       companies_interviewed: companiesInterviewed,
+      actively_interviewing: activelyInterviewing,
       interviews_completed: interviewsCompleted,
       in_progress: inProgress,
       closed,

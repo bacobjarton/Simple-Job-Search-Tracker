@@ -147,7 +147,7 @@ label.chk { display: flex; align-items: center; gap: 8px; font-size: 13px; color
 .panel h3 { margin: 0 0 12px; font-size: 14px; font-weight: 700; }
 .muted { color: var(--muted); }
 
-.stat-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .stat-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 14px 16px;
