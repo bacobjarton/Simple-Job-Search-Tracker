@@ -961,6 +961,120 @@ app.get('/api/dashboard', (req, res) => {
   });
 });
 
+// --- insights: which job-search strategies are converting ---
+
+app.get('/api/insights', (req, res) => {
+  const apps = db.prepare('SELECT * FROM applications').all().map(appFromDb);
+  const contacts = db.prepare('SELECT * FROM networking').all().map(netFromDb);
+  const rounds = db.prepare('SELECT * FROM interview_rounds').all();
+
+  const pct = (n, d) => d ? Math.round((n / d) * 1000) / 10 : 0;
+  const norm = (s) => (s || '').trim().toLowerCase();
+  const totalInterviewed = apps.filter(a => a.interview_landed).length;
+
+  // Furthest round reached per application, used as a "how deep did it go" proxy.
+  const depthByApp = {};
+  for (const r of rounds) {
+    depthByApp[r.application_id] = Math.max(depthByApp[r.application_id] || 0, r.round_number || 0);
+  }
+
+  function summarize(key, rows) {
+    const landed = rows.filter(a => a.interview_landed);
+    const depths = rows.map(a => depthByApp[a.id]).filter(Boolean);
+    return {
+      key,
+      applied: rows.length,
+      companies: new Set(rows.map(a => norm(a.company))).size,
+      interviewed: landed.length,
+      companies_interviewed: new Set(landed.map(a => norm(a.company))).size,
+      rate: pct(landed.length, rows.length),
+      share_of_interviews: pct(landed.length, totalInterviewed),
+      ghosted: rows.filter(a => a.status === 'Never Heard Back').length,
+      ghost_rate: pct(rows.filter(a => a.status === 'Never Heard Back').length, rows.length),
+      offers: rows.filter(a => a.status === 'Offer Received').length,
+      live: rows.filter(a => a.status === 'In Progress').length,
+      avg_depth: depths.length ? Math.round((depths.reduce((s, d) => s + d, 0) / depths.length) * 10) / 10 : 0,
+    };
+  }
+
+  // keyFn may return a single key or an array (an application can carry several tags).
+  function breakdown(keyFn, fallback) {
+    const m = new Map();
+    for (const a of apps) {
+      const keys = [].concat(keyFn(a) || fallback);
+      for (const k of (keys.length ? keys : [fallback])) {
+        if (!m.has(k)) m.set(k, []);
+        m.get(k).push(a);
+      }
+    }
+    return [...m.entries()].map(([k, rows]) => summarize(k, rows)).sort((a, b) => b.rate - a.rate || b.applied - a.applied);
+  }
+
+  const CHANNEL = (a) => {
+    const s = a.source || 'Other';
+    if (s === 'Referral') return 'Referral';
+    if (s === 'Company Website') return 'Direct to company';
+    if (['LinkedIn', 'Indeed', 'Glassdoor'].includes(s)) return 'Job board';
+    return 'Other / inbound';
+  };
+
+  const referral = summarize('Referral', apps.filter(a => a.source === 'Referral'));
+  const nonReferral = summarize('Everything else', apps.filter(a => a.source !== 'Referral'));
+
+  // Networking leverage: did having a known contact at the company change anything?
+  const contactCos = new Set(contacts.map(c => norm(c.company)).filter(Boolean));
+  const withContact = summarize('Contact at company', apps.filter(a => contactCos.has(norm(a.company))));
+  const withoutContact = summarize('No contact', apps.filter(a => !contactCos.has(norm(a.company))));
+
+  // Median days from applying to the first dated round, by source.
+  const firstRound = {};
+  for (const r of rounds) {
+    if (!r.interview_date) continue;
+    const cur = firstRound[r.application_id];
+    if (!cur || r.interview_date < cur) firstRound[r.application_id] = r.interview_date;
+  }
+  const speedMap = new Map();
+  for (const a of apps) {
+    if (!firstRound[a.id] || !a.applied_date) continue;
+    const days = Math.round((Date.parse(firstRound[a.id]) - Date.parse(a.applied_date)) / 86400000);
+    if (days < 0) continue;
+    const k = a.source || 'Other';
+    if (!speedMap.has(k)) speedMap.set(k, []);
+    speedMap.get(k).push(days);
+  }
+  const speed = [...speedMap.entries()].map(([key, list]) => {
+    list.sort((x, y) => x - y);
+    return { key, n: list.length, median_days: list[Math.floor(list.length / 2)] };
+  }).sort((a, b) => a.median_days - b.median_days);
+
+  const ghosted = apps.filter(a => a.status === 'Never Heard Back').length;
+
+  res.json({
+    totals: {
+      applications: apps.length,
+      interviewed: totalInterviewed,
+      companies_interviewed: new Set(apps.filter(a => a.interview_landed).map(a => norm(a.company))).size,
+      rounds: rounds.length,
+      contacts: contacts.length,
+      offers: apps.filter(a => a.status === 'Offer Received').length,
+      live: apps.filter(a => a.status === 'In Progress').length,
+      ghosted, ghost_rate: pct(ghosted, apps.length),
+    },
+    headline: {
+      referral, non_referral: nonReferral,
+      referral_share_of_applications: pct(referral.applied, apps.length),
+      referral_share_of_interviews: pct(referral.interviewed, totalInterviewed),
+      with_contact: withContact, without_contact: withoutContact,
+      with_contact_share: pct(withContact.applied, apps.length),
+    },
+    by_channel: breakdown(CHANNEL, 'Other / inbound'),
+    by_source: breakdown(a => a.source || 'Other', 'Other'),
+    by_priority: breakdown(a => a.priority || 'None', 'None'),
+    by_tag: breakdown(a => (a.tags && a.tags.length ? a.tags : ['Untagged']), 'Untagged'),
+    speed,
+  });
+});
+
 // --- suggested-action dismissals ---
 
 app.post('/api/suggestions/dismiss', (req, res) => {

@@ -26,6 +26,7 @@ const NAV = [
   { route: 'networking', label: 'Networking', ico: '🤝' },
   { route: 'interviews', label: 'Interviews', ico: '🎤' },
   { route: 'rolefit', label: 'Role Fit', ico: '🎯' },
+  { route: 'insights', label: 'Insights', ico: '📈' },
 ];
 
 const RF_MIN_CHARS = 120, RF_MAX_CHARS = 6000;
@@ -199,6 +200,7 @@ async function render() {
     else if (S.route === 'networking') { await loadAll(); renderNetworking(main); }
     else if (S.route === 'interviews') { await loadAll(); renderInterviews(main); }
     else if (S.route === 'rolefit') { await loadAll(); renderRoleFit(main); }
+    else if (S.route === 'insights') { await renderInsights(main); }
   } catch (e) {
     main.innerHTML = `<div class="empty-state">Failed to load: ${esc(e.message)}</div>`;
   }
@@ -1401,6 +1403,133 @@ function openSavedModal(saved) {
     };
     setTimeout(() => $('#sjCompany').focus(), 50);
   });
+}
+
+// ---------------- insights ----------------
+
+// Bars share one scale so lengths are comparable across every panel.
+const INS_SCALE = 50;
+
+// One hue for the measure; the row that carries the story is emphasized and the
+// rest recede, rather than colouring each bar by its own value.
+function insBars(rows, emphasizeKey) {
+  return `
+    <div class="ins-rows">
+      ${rows.map(r => {
+        const on = emphasizeKey ? r.key === emphasizeKey : false;
+        const w = Math.min(100, (r.rate / INS_SCALE) * 100);
+        return `
+        <div class="ins-row">
+          <div class="ins-cat">${esc(r.key)} <span class="n">n=${r.applied}</span></div>
+          <div class="ins-track"><div class="ins-fill ${on ? 'on' : ''}" style="width:${w.toFixed(1)}%"></div></div>
+          <div class="ins-val">${r.rate}%<span class="ct">${r.interviewed} interview${r.interviewed === 1 ? '' : 's'}</span></div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="ins-axis"><span>0%</span><span>${INS_SCALE / 2}%</span><span>${INS_SCALE}%</span></div>`;
+}
+
+async function renderInsights(main) {
+  let d;
+  try { d = await api('GET', '/api/insights'); }
+  catch (e) { main.innerHTML = `<div class="empty-state">Could not load insights: ${esc(e.message)}</div>`; return; }
+
+  const t = d.totals, h = d.headline;
+  if (!t.applications) {
+    main.innerHTML = '<div class="empty-state">No applications yet. Once you have logged a few, this page shows which sources and strategies are actually producing interviews.</div>';
+    return;
+  }
+
+  const topPriority = d.by_priority[0], topTag = d.by_tag[0];
+  const best = d.by_channel[0];
+  const direct = d.by_channel.find(c => c.key === 'Direct to company');
+  const ratio = (a, b) => (b && b.rate) ? Math.round((a.rate / b.rate) * 10) / 10 : null;
+
+  const table = (rows) => `
+    <div class="table-wrap">
+      <table class="data ins-table">
+        <thead><tr>
+          <th>Source</th><th class="r">Applied</th><th>Interview rate</th>
+          <th class="r">Share of interviews</th><th class="r">Ghosted</th>
+          <th class="r">Avg rounds</th><th class="r">Offers</th><th class="r">Still live</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td><strong>${esc(r.key)}</strong></td>
+              <td class="r">${r.applied}</td>
+              <td><span class="ins-mini"><i style="width:${Math.min(100, (r.rate / INS_SCALE) * 100).toFixed(1)}%"></i></span>${r.rate}%</td>
+              <td class="r">${r.share_of_interviews}%</td>
+              <td class="r">${r.ghost_rate}%</td>
+              <td class="r">${r.avg_depth || '—'}</td>
+              <td class="r">${r.offers || '—'}</td>
+              <td class="r">${r.live || '—'}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
+  main.innerHTML = `
+    <p class="ins-lede muted">Which strategies are actually producing interviews. Based on ${t.applications} application${t.applications === 1 ? '' : 's'}, ${t.interviewed} with an interview, ${t.rounds} round${t.rounds === 1 ? '' : 's'}, ${t.contacts} contact${t.contacts === 1 ? '' : 's'}.</p>
+
+    <div class="stat-grid">
+      <div class="stat-card"><div class="num" style="color:#22c55e">${h.referral.rate}%</div><div class="lbl">Referral interview rate</div><div class="ins-foot">${h.referral.interviewed} of ${h.referral.applied} applications</div></div>
+      <div class="stat-card"><div class="num" style="color:#94a3b8">${h.non_referral.rate}%</div><div class="lbl">Everything else</div><div class="ins-foot">${h.non_referral.interviewed} of ${h.non_referral.applied} applications</div></div>
+      <div class="stat-card"><div class="num" style="color:#2dd4bf">${h.with_contact.rate}%</div><div class="lbl">Where you knew someone</div><div class="ins-foot">vs ${h.without_contact.rate}% with no contact</div></div>
+      <div class="stat-card"><div class="num" style="color:#f97316">${t.ghost_rate}%</div><div class="lbl">Never heard back</div><div class="ins-foot">${t.ghosted} of ${t.applications} applications</div></div>
+    </div>
+
+    <div class="panel">
+      <h3>Referral vs cold</h3>
+      <p class="ins-why">Does a warm intro actually convert better than applying cold?</p>
+      <p class="ins-claim">Referrals are <b>${h.referral_share_of_applications}%</b> of your applications but <b>${h.referral_share_of_interviews}%</b> of your interviews${direct && ratio(h.referral, direct) ? `, converting <b>${ratio(h.referral, direct)}x</b> better than applying directly to a company` : ''}.</p>
+      ${insBars(d.by_channel, best ? best.key : null)}
+    </div>
+
+    <div class="panel">
+      <h3>Every source, end to end</h3>
+      <p class="ins-why">Volume, conversion, how often you get ghosted, and how deep you get once you are in.</p>
+      ${table(d.by_source)}
+    </div>
+
+    <div class="ins-two">
+      <div class="panel">
+        <h3>Is your own read any good?</h3>
+        <p class="ins-why">Interview rate by the priority you assigned when you applied.</p>
+        ${insBars(d.by_priority, topPriority ? topPriority.key : null)}
+      </div>
+      <div class="panel">
+        <h3>Which positioning lands</h3>
+        <p class="ins-why">Interview rate by the tag on the application.</p>
+        ${insBars(d.by_tag, topTag ? topTag.key : null)}
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Does knowing someone help?</h3>
+      <p class="ins-why">Applications at a company where you have a logged contact, against everywhere else.</p>
+      ${insBars([h.with_contact, h.without_contact], h.with_contact.key)}
+      <p class="ins-why" style="margin:14px 0 0">Only <b>${h.with_contact_share}%</b> of your applications were at companies where you knew someone.</p>
+    </div>
+
+    ${d.speed.length ? `
+    <div class="panel">
+      <h3>Speed to first interview</h3>
+      <p class="ins-why">Median days from applying to the first dated round.</p>
+      <div class="table-wrap">
+        <table class="data ins-table">
+          <thead><tr><th>Source</th><th class="r">Median days</th><th class="r">Based on</th></tr></thead>
+          <tbody>${d.speed.map(s => `<tr><td>${esc(s.key)}</td><td class="r">${s.median_days}</td><td class="r muted">${s.n} application${s.n === 1 ? '' : 's'}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>` : ''}
+
+    <div class="ins-note">
+      <strong>Read these with the sample size in mind.</strong>
+      Referral is ${h.referral.interviewed} interview${h.referral.interviewed === 1 ? '' : 's'} out of ${h.referral.applied} application${h.referral.applied === 1 ? '' : 's'}: one more either way moves it several points.
+      ${t.live ? `Recent applications also have not had time to convert yet (${t.live} still live), so month-over-month rates would read as a decline when they are really just unfinished.` : ''}
+      Every figure shows its <em>n</em> for that reason.
+    </div>`;
 }
 
 // ---------------- role fit analyzer ----------------

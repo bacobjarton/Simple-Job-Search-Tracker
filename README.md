@@ -28,6 +28,8 @@ On first run the database is created at `./data/tracker.db` and seeded with the 
 
 **Role Fit** — paste a job description and get a streaming, calibrated read on how well your background fits it: a verdict, where you align, where you would be ramping, and what to raise in a first conversation. It runs on the Anthropic API against a fixed record of your background, so it cannot invent experience you do not have, and it is instructed to name a bad match as a bad match. Any read can be filed against an application or a saved job. Off by default — see setup below.
 
+**Insights** — which strategies are actually converting: referral versus cold, every source end to end (volume, interview rate, share of interviews, ghost rate, how deep rounds go), whether your own priority rating predicts outcomes, which positioning lands, and whether knowing someone at the company helps. Every figure carries its sample size.
+
 **Throughout** — global search across every record type with keyboard navigation, `N` / `/` keyboard shortcuts, JSON export/import for backups, and an installable PWA manifest.
 
 ## Architecture
@@ -52,6 +54,7 @@ REST under `/api`:
 - `GET/POST /api/saved-jobs`, `PUT/DELETE /api/saved-jobs/:id`, `POST /api/saved-jobs/:id/apply`
 - `GET /api/analyze/status`, `POST /api/analyze` — Role Fit analyzer (streams `text/plain`)
 - `GET/PUT/DELETE /api/profile` — the background the analyzer reads against
+- `GET /api/insights` — strategy and source conversion analysis
 - `GET /api/dashboard` — every summary statistic in one call
 - `GET /api/export` / `POST /api/import` — full JSON backup and restore
 

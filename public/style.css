@@ -393,6 +393,46 @@ mark { background: rgba(99,102,241,.4); color: inherit; border-radius: 3px; padd
 }
 .dup-warn .dup-item { color: var(--text); font-weight: 500; margin-top: 3px; }
 
+/* ---------- insights ---------- */
+
+.ins-lede { margin: 0 0 16px; font-size: 13px; }
+.ins-why { color: var(--muted); font-size: 12.5px; margin: -4px 0 14px; }
+.ins-claim { font-size: 15px; margin: 0 0 16px; }
+.ins-claim b, .ins-why b { color: var(--accent-hover); font-weight: 700; }
+.ins-foot { font-size: 11.5px; color: var(--slate); margin-top: 4px; }
+.ins-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+
+.ins-rows { display: flex; flex-direction: column; gap: 11px; }
+.ins-row { display: grid; grid-template-columns: 165px 1fr 104px; align-items: center; gap: 12px; }
+.ins-cat { font-size: 13px; }
+.ins-cat .n { color: var(--slate); font-size: 11.5px; }
+.ins-track { position: relative; height: 14px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+/* One hue for the measure; context rows recede instead of being ramped by value. */
+.ins-fill { height: 100%; border-radius: 4px; background: var(--slate); transition: width 150ms ease; }
+.ins-fill.on { background: var(--accent); }
+.ins-val { font-size: 13px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.ins-val .ct { display: block; font-size: 11px; font-weight: 400; color: var(--slate); }
+.ins-axis {
+  display: flex; justify-content: space-between;
+  margin: 10px 0 0 177px; padding-top: 6px;
+  border-top: 1px solid var(--border); color: var(--slate); font-size: 11px;
+}
+
+table.ins-table th.r, table.ins-table td.r { text-align: right; }
+table.ins-table td { font-variant-numeric: tabular-nums; }
+table.ins-table tbody tr { cursor: default; }
+.ins-mini {
+  display: inline-block; vertical-align: middle; width: 64px; height: 8px;
+  background: var(--surface-2); border-radius: 4px; overflow: hidden; margin-right: 8px;
+}
+.ins-mini i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+
+.ins-note {
+  background: rgba(249,115,22,.09); border: 1px solid rgba(249,115,22,.35);
+  color: #fdba74; border-radius: 8px; padding: 11px 13px; font-size: 12.5px; line-height: 1.6;
+}
+.ins-note strong { color: #fed7aa; }
+
 /* ---------- role fit analyzer ---------- */
 
 .rf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
@@ -494,6 +534,9 @@ mark { background: rgba(99,102,241,.4); color: inherit; border-radius: 3px; padd
   .rates-row { grid-template-columns: 1fr; }
   .bd-grid { grid-template-columns: 1fr; }
   .rf-grid { grid-template-columns: 1fr; }
+  .ins-two { grid-template-columns: 1fr; }
+  .ins-row { grid-template-columns: 120px 1fr 86px; gap: 8px; }
+  .ins-axis { margin-left: 128px; }
   .field-grid, .modal .form-grid { grid-template-columns: 1fr; }
   .drawer { width: 100vw !important; border-left: none; }
   .drawer-resize, #drawerExpand { display: none; }
