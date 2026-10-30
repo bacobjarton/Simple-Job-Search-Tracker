@@ -200,7 +200,7 @@ async function render() {
     else if (S.route === 'networking') { await loadAll(); renderNetworking(main); }
     else if (S.route === 'interviews') { await loadAll(); renderInterviews(main); }
     else if (S.route === 'rolefit') { await loadAll(); renderRoleFit(main); }
-    else if (S.route === 'insights') { await renderInsights(main); }
+    else if (S.route === 'insights') { await loadAll(); await renderInsights(main); }
   } catch (e) {
     main.innerHTML = `<div class="empty-state">Failed to load: ${esc(e.message)}</div>`;
   }
@@ -873,6 +873,7 @@ function renderDrawer() {
   const rounds = S.interviews.filter(r => r.application_id === a.id)
     .sort((x, y) => (x.round_number || 0) - (y.round_number || 0));
   const contacts = S.contacts.filter(c => (c.company || '').toLowerCase() === a.company.toLowerCase());
+  const daysToClose = a.closed_date && a.applied_date ? daysBetween(a.applied_date, a.closed_date) : null;
 
   const fld = (label, field, type, listOpts) => {
     if (type === 'select') return `<label class="fld">${label}<select data-field="${field}">${options(listOpts, a[field], '—')}</select></label>`;
@@ -900,6 +901,9 @@ function renderDrawer() {
         ${fld('Company', 'company', 'text')}
         ${fld('Role', 'role', 'text')}
         ${fld('Applied Date', 'applied_date', 'date')}
+        <label class="fld">Closed Date<input type="date" data-field="closed_date" value="${esc(a.closed_date)}">
+          ${daysToClose !== null && daysToClose >= 0 ? `<span class="fld-hint">${daysToClose} day${daysToClose === 1 ? '' : 's'} from application</span>` : ''}
+        </label>
         <label class="fld">Follow-up Date<input type="date" data-field="followup_date" value="${esc(a.followup_date)}">
           <span class="chip-row">${[['3', '+3d'], ['7', '+1w'], ['14', '+2w']].map(([days, label]) => `<button type="button" class="chip" data-chip="${days}">${label}</button>`).join('')}</span>
         </label>
@@ -998,6 +1002,7 @@ function renderDrawer() {
     else if (field === 'tags') value = el.value.split(',').map(t => t.trim()).filter(Boolean);
     else value = el.value === '' ? null : el.value;
     const wasStatus = field === 'status';
+    const wasDate = field === 'applied_date' || field === 'closed_date';
     const updated = await api('PUT', '/api/applications/' + a.id, { [field]: value });
     const i = S.apps.findIndex(x => x.id === a.id);
     if (i >= 0) S.apps[i] = updated;
@@ -1005,7 +1010,7 @@ function renderDrawer() {
     if (wasStatus) {
       S.detailActivity = await api('GET', `/api/applications/${a.id}/activity`);
       renderDrawer();
-    }
+    } else if (wasDate) renderDrawer();
     if (S.route === 'applications') refreshListBehindDrawer();
     else if (S.route === 'dashboard') loadDash().then(() => renderDashboard($('#main')));
   };
@@ -1434,7 +1439,7 @@ async function renderInsights(main) {
   try { d = await api('GET', '/api/insights'); }
   catch (e) { main.innerHTML = `<div class="empty-state">Could not load insights: ${esc(e.message)}</div>`; return; }
 
-  const t = d.totals, h = d.headline;
+  const t = d.totals, h = d.headline, g = d.ghosting;
   if (!t.applications) {
     main.innerHTML = '<div class="empty-state">No applications yet. Once you have logged a few, this page shows which sources and strategies are actually producing interviews.</div>';
     return;
@@ -1524,12 +1529,40 @@ async function renderInsights(main) {
       </div>
     </div>` : ''}
 
+    <div class="panel">
+      <h3>Never heard back</h3>
+      <p class="ins-why">When companies answer at all, how long it takes, and which open applications are past that point.</p>
+      <p class="ins-claim"><b>${g.ghost_rate}%</b> of your applications (${g.ghosted} of ${t.applications}) ended with no response.${g.p90_days !== null ? ` Companies that did answer, with a first round or a rejection, took a median of <b>${g.median_days} days</b>, and 9 in 10 answered within <b>${g.p90_days} days</b> (n=${g.responses}).` : ` Fewer than 3 applications have a dated response so far, which is too few to estimate a response window.`}</p>
+      ${g.silent.length ? `
+      <p class="ins-why" style="margin:14px 0 8px">${g.silent.length} open application${g.silent.length === 1 ? ' is' : 's are'} past ${g.p90_days} days with no answer:</p>
+      <div class="table-wrap">
+        <table class="data ins-table">
+          <thead><tr><th>Company</th><th>Role</th><th class="r">Days since applying</th></tr></thead>
+          <tbody>${g.silent.map(s => `<tr data-id="${s.id}" style="cursor:pointer"><td><strong>${esc(s.company)}</strong></td><td class="muted">${esc(s.role)}</td><td class="r">${s.days}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>` : g.p90_days !== null ? `<p class="ins-why" style="margin:14px 0 0">No open application is past that window yet.</p>` : ''}
+    </div>
+
+    ${d.time_to_close.length ? `
+    <div class="panel">
+      <h3>Time to close</h3>
+      <p class="ins-why">Days from applying to the application ending, by how it ended.</p>
+      <div class="table-wrap">
+        <table class="data ins-table">
+          <thead><tr><th>Outcome</th><th class="r">Median days</th><th class="r">Longest</th><th class="r">Based on</th></tr></thead>
+          <tbody>${d.time_to_close.map(s => `<tr><td>${esc(s.key)}</td><td class="r">${s.median_days}</td><td class="r">${s.max_days}</td><td class="r muted">${s.n} application${s.n === 1 ? '' : 's'}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>` : ''}
+
     <div class="ins-note">
       <strong>Read these with the sample size in mind.</strong>
       Referral is ${h.referral.interviewed} interview${h.referral.interviewed === 1 ? '' : 's'} out of ${h.referral.applied} application${h.referral.applied === 1 ? '' : 's'}: one more either way moves it several points.
       ${t.live ? `Recent applications also have not had time to convert yet (${t.live} still live), so month-over-month rates would read as a decline when they are really just unfinished.` : ''}
       Every figure shows its <em>n</em> for that reason.
     </div>`;
+
+  $$('#main tr[data-id]').forEach(tr => tr.onclick = () => openDetail(Number(tr.dataset.id)));
 }
 
 // ---------------- role fit analyzer ----------------
@@ -2045,7 +2078,7 @@ function exportCSV(list) {
     ['Priority', a => a.priority], ['Location', a => a.location_type], ['Salary Range', a => a.salary_range],
     ['Source', a => a.source], ['Interview Landed', a => a.interview_landed ? 'Yes' : 'No'],
     ['Status', a => a.status], ['Recruiter Contact', a => a.recruiter_contact],
-    ['Follow-up Date', a => a.followup_date], ['Tags', a => (a.tags || []).join('; ')],
+    ['Follow-up Date', a => a.followup_date], ['Closed Date', a => a.closed_date], ['Tags', a => (a.tags || []).join('; ')],
     ['Notes', a => a.notes], ['Job Link', a => a.job_link],
   ];
   const cell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;

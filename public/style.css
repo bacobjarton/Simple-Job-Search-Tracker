@@ -369,6 +369,7 @@ table.data tbody tr:last-child td { border-bottom: none; }
 /* ---------- new UX helpers ---------- */
 
 .chip-row { display: flex; gap: 6px; margin-top: 4px; }
+.fld-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
 .chip {
   background: rgba(99,102,241,.12); color: var(--accent-hover);
   border: 1px solid rgba(99,102,241,.35); border-radius: 999px;

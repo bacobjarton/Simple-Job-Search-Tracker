@@ -111,6 +111,9 @@ if (!appCols.includes('fit_analysis')) {
   db.exec('ALTER TABLE applications ADD COLUMN fit_analysis TEXT');
   db.exec('ALTER TABLE applications ADD COLUMN fit_analysis_date TEXT');
 }
+if (!appCols.includes('closed_date')) {
+  db.exec('ALTER TABLE applications ADD COLUMN closed_date TEXT');
+}
 const savedCols = db.prepare('PRAGMA table_info(saved_jobs)').all().map(c => c.name);
 if (!savedCols.includes('fit_analysis')) {
   db.exec('ALTER TABLE saved_jobs ADD COLUMN fit_analysis TEXT');
@@ -119,7 +122,7 @@ if (!savedCols.includes('fit_analysis')) {
 
 // ---------- field definitions / row conversion ----------
 
-const APP_FIELDS = ['company','role','applied_date','priority','location_type','salary_range','source','interview_landed','status','recruiter_contact','followup_date','notes','interview_prep_notes','tags','job_link','fit_analysis','fit_analysis_date'];
+const APP_FIELDS = ['company','role','applied_date','priority','location_type','salary_range','source','interview_landed','status','recruiter_contact','followup_date','notes','interview_prep_notes','tags','job_link','fit_analysis','fit_analysis_date','closed_date'];
 const NET_FIELDS = ['name','company','title','how_connected','last_contact_date','followup_date','referred_job','job_link','notes','status'];
 const INT_FIELDS = ['application_id','company','role','round_number','interview_type','interview_date','interview_time','duration_minutes','interviewers','interviewer_titles','notes','outcome'];
 const SAVED_FIELDS = ['company','role','salary_range','location_type','source','priority','job_link','notes','saved_date','fit_analysis','fit_analysis_date'];
@@ -185,6 +188,21 @@ function todayISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// An application is over once it lands in one of these; closed_date marks when.
+const CLOSED_STATUSES = ['Rejected', 'Withdrawn', 'Never Heard Back'];
+
+// Closed applications with no closed_date take it from the status change that
+// closed them. Covers rows that predate the column, and imports of old exports.
+function backfillClosedDates() {
+  const rows = db.prepare(`SELECT id, status FROM applications WHERE closed_date IS NULL AND status IN (${CLOSED_STATUSES.map(() => '?').join(',')})`).all(...CLOSED_STATUSES);
+  const lastChange = db.prepare(`SELECT event_date FROM activity_log WHERE application_id=? AND event_type='Status Change' AND note LIKE ? ORDER BY event_date DESC, id DESC LIMIT 1`);
+  const set = db.prepare('UPDATE applications SET closed_date=? WHERE id=?');
+  for (const r of rows) {
+    const ev = lastChange.get(r.id, `%to "${r.status}"`);
+    if (ev && ev.event_date) set.run(ev.event_date, r.id);
+  }
+}
+
 function logActivity(applicationId, eventType, note, eventDate) {
   db.prepare('INSERT INTO activity_log (application_id, event_date, event_type, note) VALUES (?,?,?,?)')
     .run(applicationId, eventDate || todayISO(), eventType, note || null);
@@ -224,6 +242,7 @@ function seedIfEmpty() {
   console.log(`Seeded database: ${seed.applications.length} applications, ${seed.networking.length} contacts, ${seed.interviews.length} interview rounds, ${(seed.savedJobs || []).length} saved jobs.`);
 }
 seedIfEmpty();
+backfillClosedDates();
 
 // ---------- app / API ----------
 
@@ -284,6 +303,13 @@ app.put('/api/applications/:id', (req, res) => {
   if (!existing) return res.status(404).json({ error: 'not found' });
   const cur = appFromDb(existing);
   const merged = { ...cur, ...req.body };
+  // Stamp the date an application closes, and clear it if it reopens, unless
+  // the caller set closed_date itself.
+  if (req.body.closed_date === undefined && merged.status !== cur.status) {
+    const nowClosed = CLOSED_STATUSES.includes(merged.status);
+    if (nowClosed && !CLOSED_STATUSES.includes(cur.status)) merged.closed_date = todayISO();
+    else if (!nowClosed) merged.closed_date = null;
+  }
   db.prepare(`UPDATE applications SET ${APP_FIELDS.map(f => `${f}=@${f}`).join(', ')} WHERE id=@id`)
     .run({ ...appToDb(merged), id: existing.id });
   if (req.body.status !== undefined && req.body.status !== cur.status) {
@@ -766,7 +792,6 @@ app.get('/api/dashboard', (req, res) => {
   const today = todayISO();
   const ageOf = iso => iso ? Math.round((Date.parse(today + 'T00:00:00Z') - Date.parse(iso + 'T00:00:00Z')) / 86400000) : null;
   const total = apps.length;
-  const CLOSED = ['Rejected', 'Never Heard Back', 'Withdrawn'];
 
   const interviewsLanded = apps.filter(a => a.interview_landed).length;
   const companiesInterviewed = new Set(
@@ -783,7 +808,7 @@ app.get('/api/dashboard', (req, res) => {
   ).length;
   const inProgress = apps.filter(a => a.status === 'In Progress').length;
   const offers = apps.filter(a => a.status === 'Offer Received').length;
-  const closed = apps.filter(a => CLOSED.includes(a.status)).length;
+  const closed = apps.filter(a => CLOSED_STATUSES.includes(a.status)).length;
   const pct = n => total ? Math.round((n / total) * 1000) / 10 : 0;
 
   // velocity: last 12 weeks (Mon-start), applications per week
@@ -1047,7 +1072,48 @@ app.get('/api/insights', (req, res) => {
     return { key, n: list.length, median_days: list[Math.floor(list.length / 2)] };
   }).sort((a, b) => a.median_days - b.median_days);
 
+  // Median days from applying to the application closing, by how it ended.
+  // Never Heard Back is left out: its date is when you gave up, not an event.
+  const closeMap = new Map();
+  for (const a of apps) {
+    if (!['Rejected', 'Withdrawn'].includes(a.status) || !a.closed_date || !a.applied_date) continue;
+    const days = Math.round((Date.parse(a.closed_date) - Date.parse(a.applied_date)) / 86400000);
+    if (days < 0) continue;
+    if (!closeMap.has(a.status)) closeMap.set(a.status, []);
+    closeMap.get(a.status).push(days);
+  }
+  const time_to_close = [...closeMap.entries()].map(([key, list]) => {
+    list.sort((x, y) => x - y);
+    return { key, n: list.length, median_days: list[Math.floor(list.length / 2)], max_days: list[list.length - 1] };
+  }).sort((a, b) => CLOSED_STATUSES.indexOf(a.key) - CLOSED_STATUSES.indexOf(b.key));
+
   const ghosted = apps.filter(a => a.status === 'Never Heard Back').length;
+
+  // Response window: when companies answer at all (a first round or a
+  // rejection), how many days it takes. Open applications past the 90th
+  // percentile with no answer are probably ghosted.
+  const today = todayISO();
+  const responseDays = [];
+  for (const a of apps) {
+    if (!a.applied_date) continue;
+    const answers = [firstRound[a.id], a.status === 'Rejected' ? a.closed_date : null].filter(Boolean).sort();
+    if (!answers.length) continue;
+    const days = Math.round((Date.parse(answers[0]) - Date.parse(a.applied_date)) / 86400000);
+    if (days >= 0) responseDays.push(days);
+  }
+  responseDays.sort((x, y) => x - y);
+  const n = responseDays.length;
+  const p90 = n >= 3 ? responseDays[Math.ceil(n * 0.9) - 1] : null;
+  const silent = p90 === null ? [] : apps
+    .filter(a => a.status === 'In Progress' && !a.interview_landed && !firstRound[a.id] && a.applied_date)
+    .map(a => ({ id: a.id, company: a.company, role: a.role, days: Math.round((Date.parse(today) - Date.parse(a.applied_date)) / 86400000) }))
+    .filter(a => a.days > p90)
+    .sort((x, y) => y.days - x.days);
+  const ghosting = {
+    ghosted, ghost_rate: pct(ghosted, apps.length),
+    responses: n, median_days: n ? responseDays[Math.floor(n / 2)] : null, p90_days: p90,
+    silent,
+  };
 
   res.json({
     totals: {
@@ -1072,6 +1138,8 @@ app.get('/api/insights', (req, res) => {
     by_priority: breakdown(a => a.priority || 'None', 'None'),
     by_tag: breakdown(a => (a.tags && a.tags.length ? a.tags : ['Untagged']), 'Untagged'),
     speed,
+    time_to_close,
+    ghosting,
   });
 });
 
@@ -1139,6 +1207,7 @@ app.post('/api/import', (req, res) => {
       nets.forEach((n, i) => inn.run({ ...netToDb(n), id: n.id || i + 1 }));
       ints.forEach((r, i) => ii.run({ ...intToDb(r), id: r.id || i + 1 }));
       acts.forEach((l, i) => il.run({ id: l.id || i + 1, application_id: l.application_id ?? null, event_date: l.event_date ?? null, event_type: l.event_type ?? null, note: l.note ?? null }));
+      backfillClosedDates();
       const isv = db.prepare(`INSERT INTO saved_jobs (id,${SAVED_FIELDS.join(',')}) VALUES (@id,${SAVED_FIELDS.map(f => '@' + f).join(',')})`);
       saved.forEach((s, i) => {
         const out = { id: s.id || i + 1 };
