@@ -36,6 +36,7 @@ const RF_STREAM_ERROR = ' STREAM_ERROR';
 
 const S = {
   apps: [], contacts: [], interviews: [], saved: [], dash: null,
+  me: null, csrf: '',
   route: 'dashboard',
   viewMode: window.innerWidth < 768 ? 'kanban' : 'table',
   filtersOpen: false,
@@ -102,10 +103,24 @@ function daysBetween(a, b) {
 }
 function daysSince(iso) { return iso ? daysBetween(iso, todayISO()) : null; }
 
+function csrfToken() {
+  if (S.csrf) return S.csrf;
+  const m = document.cookie.match(/(?:^|; )csrf=([^;]*)/);
+  return m ? decodeURIComponent(m[1]) : '';
+}
 async function api(method, url, body) {
-  const opts = { method, headers: { 'Content-Type': 'application/json' } };
-  if (body !== undefined) opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
+  const headers = {};
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (method !== 'GET' && method !== 'HEAD') headers['X-CSRF-Token'] = csrfToken();
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) {
+    location.href = '/login?next=' + encodeURIComponent(location.pathname + location.search + location.hash);
+    throw new Error('Sign in required.');
+  }
   if (!res.ok) {
     let msg = res.statusText;
     try { msg = (await res.json()).error || msg; } catch (e) {}
@@ -171,8 +186,20 @@ async function loadDash() { S.dash = await api('GET', '/api/dashboard'); }
 
 // ---------------- router / nav ----------------
 
+function sideNavItems() {
+  const items = NAV.slice();
+  items.push({ route: 'account', label: 'Account', ico: '👤' });
+  if (S.me && S.me.is_admin) items.push({ route: 'admin', label: 'Admin', ico: '🛡️' });
+  return items;
+}
+function planLabel(p) {
+  if (p === 'pass') return '90-day pass';
+  if (p === 'subscription') return 'Monthly';
+  if (p === 'lifetime') return 'Lifetime';
+  return 'Free';
+}
 function setRoute(route) {
-  if (!NAV.some(n => n.route === route)) route = 'dashboard';
+  if (!sideNavItems().some(n => n.route === route)) route = 'dashboard';
   if (location.hash !== '#/' + route) { location.hash = '#/' + route; return; }
   S.route = route;
   renderNav();
@@ -183,12 +210,24 @@ function routeFromHash() {
 }
 window.addEventListener('hashchange', () => setRoute(routeFromHash()));
 
+function renderAccountChip() {
+  const me = S.me;
+  const chip = $('#accountChip');
+  const top = $('#topAccount');
+  if (!me || !chip || !top) return;
+  const label = planLabel(me.effective_plan);
+  chip.innerHTML = `<a href="#/account">${esc(me.email)}</a><div class="chip-plan">${esc(label)}</div>`;
+  top.textContent = label;
+}
 function renderNav() {
   const link = n => `<a href="#/${n.route}" class="${S.route === n.route ? 'active' : ''}"><span class="ico">${n.ico}</span><span>${n.label}</span></a>`;
-  $('#sidenav').innerHTML = NAV.map(link).join('');
+  const side = sideNavItems();
+  $('#sidenav').innerHTML = side.map(link).join('');
   $('#bottomnav').innerHTML = NAV.map(link).join('');
-  $('#pageTitle').textContent = NAV.find(n => n.route === S.route).label;
+  const current = side.find(n => n.route === S.route) || side[0];
+  $('#pageTitle').textContent = current.label;
   $('#fab').hidden = !(S.route === 'applications' && window.innerWidth < 768);
+  renderAccountChip();
 }
 
 async function render() {
@@ -201,6 +240,8 @@ async function render() {
     else if (S.route === 'interviews') { await loadAll(); renderInterviews(main); }
     else if (S.route === 'rolefit') { await loadAll(); renderRoleFit(main); }
     else if (S.route === 'insights') { await loadAll(); await renderInsights(main); }
+    else if (S.route === 'account') { await renderAccount(main); }
+    else if (S.route === 'admin') { await renderAdmin(main); }
   } catch (e) {
     main.innerHTML = `<div class="empty-state">Failed to load: ${esc(e.message)}</div>`;
   }
@@ -622,7 +663,10 @@ function renderApplications(main) {
   const f = S.filters;
   const anyFilter = Object.values(f).some(Boolean);
 
+  const cap = S.me && S.me.limits && S.me.limits.applications;
+  const atCap = cap != null && S.apps.length >= cap;
   main.innerHTML = `
+    ${atCap ? `<div class="limit-banner">Free plan includes ${cap} applications. <a href="#/account">Upgrade</a> to add more.</div>` : ''}
     <div class="toolbar">
       <button class="btn ghost sm" id="filterToggle">⚲ Filters${anyFilter ? ' •' : ''}</button>
       <span class="muted">${list.length} of ${S.apps.length}</span>
@@ -1691,6 +1735,8 @@ async function renderRoleFit(main) {
         <h3>Job description</h3>
         <p class="muted" style="margin:-4px 0 10px;font-size:12.5px">
           Paste the posting. The analyzer reads it against your background and is told to name the gaps as plainly as the matches.
+          The posting and your saved background are sent to Anthropic to produce this read.
+          ${cfg.quota ? `<br>${cfg.quota.monthly_used} of ${cfg.quota.monthly_limit} reads used this month.` : ''}
         </p>
         ${rfProfilePanel(cfg, rf)}
         <textarea id="rfInput" rows="16" placeholder="Paste the full job description here, including responsibilities and requirements."
@@ -1822,9 +1868,13 @@ async function renderRoleFit(main) {
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
         body: JSON.stringify({ jobDescription: text }),
       });
+      if (res.status === 401) {
+        location.href = '/login?next=' + encodeURIComponent(location.pathname + location.hash);
+        return;
+      }
       if (!res.ok) {
         const data = await res.json().catch(() => null);
         rf.error = (data && data.error) || 'Something went wrong. Try again.';
@@ -2109,7 +2159,7 @@ function doImport(file) {
   reader.onload = async () => {
     try {
       const data = JSON.parse(reader.result);
-      if (!confirm('Importing REPLACES all current data. Continue?')) return;
+      if (!confirm('Importing replaces your applications, contacts, interviews, and saved jobs. Other accounts are not affected. Continue?')) return;
       const result = await api('POST', '/api/import', data);
       toast(`Imported ${result.counts.applications} applications`);
       await loadAll(); if (S.route === 'dashboard') await loadDash();
@@ -2182,6 +2232,113 @@ window.addEventListener('resize', () => {
   syncTopbarHeight();
 });
 
+async function renderAccount(main) {
+  S.me = await api('GET', '/api/auth/me');
+  S.csrf = S.me.csrf_token || S.csrf;
+  renderAccountChip();
+  const me = S.me;
+  const lim = me.limits || {};
+  const appCap = lim.applications == null ? 'Unlimited' : `${lim.applications_used} / ${lim.applications}`;
+  const until = me.access_until ? fmtDate(me.access_until.slice(0, 10)) : '';
+  main.innerHTML = `
+    <div class="account-grid">
+      <section class="panel">
+        <h3>Account</h3>
+        <p><strong>${esc(me.email)}</strong></p>
+        <p>Plan: <strong>${esc(planLabel(me.effective_plan))}</strong>${until && me.effective_plan !== 'free' && me.effective_plan !== 'lifetime' ? ` · access through ${esc(until)}` : ''}</p>
+        <p class="muted">Applications: ${esc(String(appCap))}. Role Fit this month: ${lim.analyze_monthly_used} / ${lim.analyze_monthly}.</p>
+        <div class="account-actions">
+          <button class="btn ghost" id="logoutBtn">Sign out</button>
+          <a class="btn ghost" href="/terms">Terms</a>
+          <a class="btn ghost" href="/privacy">Privacy</a>
+          ${me.is_admin ? '<a class="btn ghost" href="#/admin">Admin</a>' : ''}
+        </div>
+      </section>
+      <section class="panel">
+        <h3>Upgrade</h3>
+        <p class="muted">Payments run through Stripe in test mode until you switch keys. Cards are handled by Stripe, not stored here.</p>
+        <div class="account-actions">
+          <button class="btn" id="buyPass" ${me.effective_plan === 'lifetime' ? 'disabled' : ''}>$19 · 90-day pass</button>
+          <button class="btn" id="buySub" ${me.effective_plan === 'lifetime' ? 'disabled' : ''}>$9 / month</button>
+          <button class="btn" id="buyLife" ${!me.billing.lifetime_available || me.effective_plan === 'lifetime' ? 'disabled' : ''}>${me.billing.lifetime_sold_out ? 'Lifetime sold out' : '$49 lifetime'}</button>
+          <button class="btn ghost" id="portalBtn" ${me.billing.portal ? '' : 'disabled'}>Billing portal</button>
+        </div>
+        ${me.billing.stripe ? '' : '<p class="muted">Checkout is off until STRIPE_SECRET_KEY is a test key and the price ids are set.</p>'}
+      </section>
+      <section class="panel">
+        <h3>Your data</h3>
+        <p class="muted">Export is a JSON file of your records only. Deleting the account removes your applications, contacts, interviews, saved jobs, profile, and sessions. A lifetime purchase keeps the email on the sale count so the 50-seat cap stays honest. Stripe keeps its own payment records.</p>
+        <div class="account-actions">
+          <button class="btn ghost" id="accountExport">Download export</button>
+          <button class="btn danger" id="deleteAccount">Delete account</button>
+        </div>
+      </section>
+    </div>`;
+  $('#logoutBtn').onclick = async () => {
+    await api('POST', '/api/auth/logout');
+    location.href = '/';
+  };
+  const buy = (product) => async () => {
+    const data = await api('POST', '/api/billing/checkout', { product });
+    if (data.url) location.href = data.url;
+  };
+  $('#buyPass').onclick = buy('pass');
+  $('#buySub').onclick = buy('subscription');
+  $('#buyLife').onclick = buy('lifetime');
+  $('#portalBtn').onclick = async () => {
+    const data = await api('POST', '/api/billing/portal');
+    if (data.url) location.href = data.url;
+  };
+  $('#accountExport').onclick = () => doExport();
+  $('#deleteAccount').onclick = async () => {
+    const typed = prompt('Type DELETE to permanently delete this account and all of its job-search data.');
+    if (typed !== 'DELETE') return;
+    await api('DELETE', '/api/account', { confirm: 'DELETE' });
+    location.href = '/?deleted=1';
+  };
+}
+
+async function renderAdmin(main) {
+  if (!S.me || !S.me.is_admin) {
+    main.innerHTML = '<div class="empty-state">Admin only.</div>';
+    return;
+  }
+  const data = await api('GET', '/api/admin/overview');
+  main.innerHTML = `
+    <div class="panel">
+      <h3>Users</h3>
+      <p class="muted">Lifetime ${data.lifetime.sold} / ${data.lifetime.cap}. Role Fit today ${data.analyze_global_today} / ${data.analyze_global_cap}.</p>
+      <div class="table-wrap">
+        <table class="admin-table">
+          <thead><tr><th>Email</th><th>Plan</th><th>Effective</th><th>Apps</th><th>Reads</th><th>Tokens</th><th>Since</th></tr></thead>
+          <tbody>
+            ${data.users.map(u => `<tr>
+              <td>${esc(u.email)}${u.is_admin ? ' <span class="badge outline">admin</span>' : ''}</td>
+              <td>${esc(u.plan)}</td>
+              <td>${esc(u.effective_plan)}</td>
+              <td>${u.application_count}</td>
+              <td>${u.analyze_month}</td>
+              <td>${u.input_tokens} / ${u.output_tokens}</td>
+              <td>${esc((u.created_at || '').slice(0, 10))}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
 // boot
-setRoute(routeFromHash());
+(async function boot() {
+  try {
+    S.me = await api('GET', '/api/auth/me');
+    S.csrf = S.me.csrf_token || '';
+  } catch (e) {
+    return;
+  }
+  const q = new URLSearchParams(location.search);
+  if (q.get('checkout') === 'success') toast('Payment received. Your plan updates when Stripe confirms it.');
+  if (q.get('checkout') === 'cancel') toast('Checkout canceled.');
+  if (q.has('checkout')) history.replaceState({}, '', location.pathname + location.hash);
+  setRoute(routeFromHash());
+})();
 })();

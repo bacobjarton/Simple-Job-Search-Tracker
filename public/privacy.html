@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy policy — Job Tracker</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="legal">
+<main>
+  <p><a href="/">← Job Tracker</a></p>
+  <h1>Privacy policy</h1>
+  <p class="muted">Last updated {{YEAR}}.</p>
+
+  <h2>Who this covers</h2>
+  <p>This policy describes the hosted Job Tracker operated by {{PRIVACY_EMAIL}}. It is the account you sign in to, not a separate analytics product.</p>
+
+  <h2>What we store</h2>
+  <ul>
+    <li>Account: email address, optional name, and a Google account id if you use Google sign-in.</li>
+    <li>Job search content you enter: companies, roles, notes, contacts, interview notes, saved jobs, tags, links, and dates.</li>
+    <li>The background you save for Role Fit (resume text or a summary you paste) and any analysis you choose to file on a record.</li>
+    <li>Billing: Stripe customer id, subscription id, plan name, and the date access runs until. Card numbers stay at Stripe.</li>
+    <li>Role Fit usage: when a read ran, and the input and output token counts Anthropic reports. The usage row does not store the posting.</li>
+    <li>A session id and a CSRF token in cookies so you stay signed in and so another site cannot submit changes as you.</li>
+  </ul>
+
+  <h2>Role Fit sends text to Anthropic</h2>
+  <p>When you run Role Fit, two things leave this server: the job posting you pasted, and the background saved on your account (or, if the operator has turned on a server-wide profile file, that file). They are sent to Anthropic's API to generate the read, along with the instructions that ask the model to stick to that background. Anthropic's privacy policy and terms apply to that processing. We do not send your data to Anthropic for any other feature. If you do not run Role Fit, nothing is sent.</p>
+
+  <h2>Other processors</h2>
+  <ul>
+    <li>Stripe, for checkout, subscriptions, and the customer portal.</li>
+    <li>The email provider the operator configured (for example Resend), which receives your email address and the sign-in link.</li>
+    <li>Google, only if you choose Google sign-in. We receive your email, whether Google says it is verified, your name, and the Google subject id.</li>
+  </ul>
+
+  <h2>Cookies</h2>
+  <p>The session cookie is HttpOnly. A second cookie holds the CSRF token so the app can send it back on changes. Both are SameSite=Lax. They are not used for advertising.</p>
+
+  <h2>Export</h2>
+  <p>The app's export downloads a JSON file of your applications, contacts, interviews, activity, saved jobs, dismissed suggestions, and saved background. It does not include anyone else's data. Import replaces your records only.</p>
+
+  <h2>Deletion</h2>
+  <p>The Account page deletes the account when you type DELETE. That removes your user row and, through database cascades, your applications, activity, interviews, contacts, saved jobs, background, sessions, and Role Fit usage. Magic links for that email are deleted too. If you have a Stripe subscription, we ask Stripe to cancel it. Stripe still keeps payment records under its own policy.</p>
+  <p>A lifetime purchase leaves a sale row so the 50-seat cap cannot be reset by deleting an account. That row keeps the email and the Stripe checkout id. The job-search content is still deleted. Ask {{PRIVACY_EMAIL}} if you need that sale record removed and understand the cap may then be wrong by one.</p>
+
+  <h2>How long</h2>
+  <p>Content stays until you delete it or delete the account, or until the operator shuts the service down. Server logs may keep an IP address and a request line for a short operational window. Sign-in links are discarded about an hour after they are created.</p>
+
+  <h2>Security</h2>
+  <p>Each table of job-search data is stored with your user id, and the API reads and writes only that id. This is a single SQLite database on the server, not a separate database per customer. Isolation is enforced in the queries, not by a physical split.</p>
+
+  <h2>Contact</h2>
+  <p>Privacy requests: {{PRIVACY_EMAIL}}.</p>
+</main>
+</body>
+</html>

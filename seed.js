@@ -1,6 +1,7 @@
 /*
- * Sample data for the demo. Inserted on first run, only when the database is
- * empty — delete ./data/tracker.db to start over.
+ * Sample data for the demo. Inserted into the demo account on first run when
+ * the database has no applications, unless SEED_DEMO=0. Production (NODE_ENV=production)
+ * skips it unless SEED_DEMO=1. Delete the database file to start over.
  *
  * Every company, person, and note below is fictional.
  *

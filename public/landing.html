@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f172a">
+<title>Job Tracker — a job search you can actually see</title>
+<meta name="description" content="Track applications, interviews, and networking. Role Fit reads a posting against your real background. Free for 25 applications, then $9/month or $19 for 90 days.">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="marketing">
+<header class="m-nav">
+  <a class="brand" href="/">🎯 <span>Job Tracker</span></a>
+  <nav>
+    <a href="#pricing">Pricing</a>
+    <a href="#compare">Compare</a>
+    <a href="/login">Sign in</a>
+    <a class="btn sm" href="/login">Start free</a>
+  </nav>
+</header>
+
+<main>
+  <section class="hero">
+    <p class="eyebrow">Applications, interviews, and the follow-up you keep forgetting</p>
+    <h1>A job search tracker that stays honest about fit.</h1>
+    <p class="lede">One place for the pipeline, the people, and a Role Fit read that is told to call a bad match a bad match. Free for 25 applications. Paid plans are $19 for 90 days or $9 a month, not $30–$40.</p>
+    <div class="hero-cta">
+      <a class="btn" href="/login">Start free</a>
+      <a class="btn ghost" href="#pricing">See pricing</a>
+    </div>
+  </section>
+
+  <section class="feature-grid" id="features">
+    <article>
+      <h2>Today, not a graveyard of rows</h2>
+      <p>The dashboard pulls interviews happening today, follow-ups you scheduled, and suggestions for things that have gone quiet. Dismiss one and it stays gone for two weeks.</p>
+    </article>
+    <article>
+      <h2>The whole pipeline</h2>
+      <p>Applications in a table or kanban, interview rounds grouped by company, networking contacts, and saved jobs you can turn into an application in one click.</p>
+    </article>
+    <article>
+      <h2>What is actually converting</h2>
+      <p>Insights compares referral against everything else, source by source, and whether a contact at the company changes the outcome. Every figure shows its sample size.</p>
+    </article>
+    <article>
+      <h2>Role Fit, with a quota</h2>
+      <p>Paste a posting. The read uses the background you saved and is sent to Anthropic for that request. Free accounts get a few reads a month. Paid accounts get a much higher cap, and there is a hard daily ceiling for everyone.</p>
+    </article>
+    <article>
+      <h2>Your data, exportable</h2>
+      <p>JSON export and import are per account. Deleting the account deletes the applications, notes, contacts, and profile that belong to it.</p>
+    </article>
+    <article>
+      <h2>Sign in without a password</h2>
+      <p>A magic link to your email. Google sign-in when the host has configured it. Sessions live in an HttpOnly cookie, and changes require a CSRF token.</p>
+    </article>
+  </section>
+
+  <section id="pricing">
+    <h2>Pricing</h2>
+    <p class="lede">The free plan is usable. The paid plans are for a search that has outgrown 25 applications and a handful of Role Fit reads.</p>
+    <div class="price-grid">
+      <article class="price-card">
+        <h3>Free</h3>
+        <p class="price">$0</p>
+        <ul>
+          <li>25 applications</li>
+          <li>3 Role Fit reads / month</li>
+          <li>Interviews, networking, insights</li>
+          <li>Export and delete anytime</li>
+        </ul>
+        <a class="btn ghost" href="/login">Create an account</a>
+      </article>
+      <article class="price-card featured">
+        <h3>90-day pass</h3>
+        <p class="price">$19 <span>once</span></p>
+        <ul>
+          <li>Unlimited applications for 90 days</li>
+          <li>100 Role Fit reads / month</li>
+          <li>Access ends on a date, not a surprise renewal</li>
+        </ul>
+        <a class="btn" href="/login">Get the pass</a>
+      </article>
+      <article class="price-card">
+        <h3>Monthly</h3>
+        <p class="price">$9 <span>/ month</span></p>
+        <ul>
+          <li>Unlimited applications</li>
+          <li>100 Role Fit reads / month</li>
+          <li>Cancel in the Stripe customer portal</li>
+        </ul>
+        <a class="btn ghost" href="/login">Subscribe</a>
+      </article>
+      <article class="price-card" id="lifetimeCard">
+        <h3>Lifetime</h3>
+        <p class="price">$49 <span>once</span></p>
+        <ul>
+          <li>Unlimited applications</li>
+          <li>Paid Role Fit quota</li>
+          <li id="lifetimeNote">Limited to 50 sales, then the offer closes</li>
+        </ul>
+        <a class="btn ghost" href="/login" id="lifetimeCta">Claim a seat</a>
+      </article>
+    </div>
+  </section>
+
+  <section id="compare">
+    <h2>Compared with the usual trackers</h2>
+    <p class="lede">List prices competitors publish for their paid plans. Those prices move. This table is the reason the pass is 90 days and the subscription is $9.</p>
+    <div class="table-wrap">
+      <table class="compare">
+        <thead>
+          <tr><th></th><th>Job Tracker</th><th>Teal</th><th>Huntr</th><th>Simplify</th></tr>
+        </thead>
+        <tbody>
+          <tr><th>Paid price</th><td>$9 / month, or $19 for 90 days</td><td>$29 / 30 days</td><td>$40 / month</td><td>$39.99 / month</td></tr>
+          <tr><th>Free start</th><td>25 applications</td><td>Limited free tier</td><td>Limited free tier</td><td>Limited free tier</td></tr>
+          <tr><th>One-time option</th><td>$49 lifetime, 50 seats</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><th>Fit read</th><td>Against the background you save, with a monthly cap</td><td>Their own AI tools</td><td>Their own AI tools</td><td>Their own AI tools</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="closing">
+    <h2>Start with the free 25.</h2>
+    <p>No card required. Upgrade from the account page when the search gets bigger.</p>
+    <a class="btn" href="/login">Start free</a>
+  </section>
+</main>
+
+<footer class="m-foot">
+  <a href="/terms">Terms</a>
+  <a href="/privacy">Privacy</a>
+  <span>Role Fit sends the posting and your background to Anthropic.</span>
+</footer>
+<script>
+fetch('/api/billing/catalog').then(r => r.json()).then(c => {
+  const note = document.getElementById('lifetimeNote');
+  const cta = document.getElementById('lifetimeCta');
+  if (!c.lifetime) return;
+  if (!c.lifetime.enabled) {
+    note.textContent = 'Limited to ' + c.lifetime.cap + ' sales once the host adds the Stripe price.';
+    return;
+  }
+  if (!c.lifetime.available) {
+    note.textContent = 'Sold out (' + c.lifetime.sold + ' of ' + c.lifetime.cap + ').';
+    cta.textContent = 'Sold out';
+    cta.setAttribute('aria-disabled', 'true');
+    cta.removeAttribute('href');
+  } else {
+    note.textContent = (c.lifetime.cap - c.lifetime.sold) + ' of ' + c.lifetime.cap + ' seats left.';
+  }
+}).catch(() => {});
+</script>
+</body>
+</html>

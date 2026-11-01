@@ -23,9 +23,12 @@
     <div class="brand">🎯 <span>Job Tracker</span></div>
     <nav id="sidenav"></nav>
     <div class="sidebar-footer">
-      <button class="btn ghost sm" id="exportBtn" title="Download JSON backup">⬇ Export</button>
-      <button class="btn ghost sm" id="importBtn" title="Restore from JSON backup">⬆ Import</button>
-      <input type="file" id="importFile" accept="application/json" hidden>
+      <div id="accountChip" class="account-chip"></div>
+      <div class="sidebar-actions">
+        <button class="btn ghost sm" id="exportBtn" title="Download JSON backup">⬇ Export</button>
+        <button class="btn ghost sm" id="importBtn" title="Restore from JSON backup">⬆ Import</button>
+        <input type="file" id="importFile" accept="application/json" hidden>
+      </div>
     </div>
   </aside>
 
@@ -35,9 +38,10 @@
       <input id="globalSearch" type="search" placeholder="Search…  ( / )" autocomplete="off">
       <div id="searchResults" class="search-results" hidden></div>
     </div>
+    <a id="topAccount" class="top-account" href="#/account">Account</a>
   </header>
 
-  <main id="main"></main>
+  <main id="main"><p class="muted" style="padding:8px 0">Loading…</p></main>
 
   <nav id="bottomnav"></nav>
 

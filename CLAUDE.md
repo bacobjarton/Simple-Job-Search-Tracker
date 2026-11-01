@@ -27,13 +27,19 @@ the `day()` helper at the top of `seed.js`.
 
 ## Local development
 
-- Runs on **port 3000** (`npm start`, then <http://localhost:3000>).
-- The database is created at `./data/tracker.db` on first run and seeded from
-  `seed.js`. Delete `data/` to reseed.
+- Runs on **port 3000** (`npm start`, then <http://localhost:3000>). The
+  marketing page is `/`. The tracker is `/app` and requires a magic-link sign-in.
+  With the default `console` email provider, the link is printed in the server log.
+- The database is created at `./data/tracker.db` (or `/data/tracker.db` when that
+  directory is writable). Unless `SEED_DEMO=0`, an empty database is seeded from
+  `seed.js` into `demo@localhost`. Delete `data/` to reseed. Production
+  (`NODE_ENV=production`) does not seed unless `SEED_DEMO=1`.
 
 ## Architecture notes
 
-No build step and no client-side dependencies: `public/index.html` loads one
-script and one stylesheet. Runtime dependencies are only `express` and
-`better-sqlite3`. `public/app.js` is the entire SPA — routing, rendering, and
-state. Keep it that way; adding a bundler would defeat the point of the project.
+No build step and no client-side dependencies. `public/app.html` is the tracker
+and loads one script and one stylesheet. `public/app.js` is the entire SPA —
+routing, rendering, and state. Keep it that way; adding a bundler would defeat
+the point of the project. Server runtime dependencies are `express`,
+`better-sqlite3`, `@anthropic-ai/sdk`, and `stripe`. All job-search tables are
+scoped by `user_id`. `AUTH_PASSWORD` is not used.

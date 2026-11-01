@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0f172a">
+<title>Sign in — Job Tracker</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="auth-body">
+<main class="auth-card">
+  <a class="brand" href="/">🎯 <span>Job Tracker</span></a>
+  <h1>Sign in</h1>
+  <p class="muted">We email you a link. It expires in 15 minutes and works once. No password.</p>
+  <form id="form">
+    <label class="fld">Email
+      <input id="email" type="email" autocomplete="email" required placeholder="you@example.com">
+    </label>
+    <button class="btn" id="submit" type="submit">Email me a link</button>
+  </form>
+  <p id="msg" class="muted" hidden></p>
+  <p id="dev" class="dev-link" hidden></p>
+  <div id="googleWrap" hidden>
+    <a class="btn ghost" id="google" href="/api/auth/google">Continue with Google</a>
+  </div>
+  <p class="fine">By continuing you agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy</a> policy. Job postings and the background you save for Role Fit are sent to Anthropic when you run an analysis.</p>
+</main>
+<script>
+const params = new URLSearchParams(location.search);
+const next = params.get('next');
+function safeNext(v) {
+  if (!v || !v.startsWith('/') || v.startsWith('//') || v.includes('\\')) return '/app';
+  return v;
+}
+const errors = {
+  link: 'That sign-in link is invalid or already used. Request a new one.',
+  google: 'Google sign-in did not complete. Try the email link.',
+};
+if (params.get('error') && errors[params.get('error')]) {
+  const msg = document.getElementById('msg');
+  msg.hidden = false;
+  msg.textContent = errors[params.get('error')];
+}
+fetch('/api/auth/me').then(r => { if (r.ok) location.href = safeNext(next); });
+fetch('/api/auth/config').then(r => r.json()).then(cfg => {
+  if (cfg.google) document.getElementById('googleWrap').hidden = false;
+}).catch(() => {});
+document.getElementById('form').onsubmit = async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('submit');
+  btn.disabled = true;
+  const msg = document.getElementById('msg');
+  msg.hidden = false;
+  msg.textContent = 'Sending…';
+  try {
+    const res = await fetch('/api/auth/magic-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: document.getElementById('email').value }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      msg.textContent = data.error || 'Could not send the link.';
+      btn.disabled = false;
+      return;
+    }
+    msg.textContent = data.message || 'Check your email for a sign-in link.';
+    if (data.dev_link) {
+      const dev = document.getElementById('dev');
+      dev.hidden = false;
+      dev.innerHTML = 'Local sign-in link: <a href="' + data.dev_link.replace(/"/g, '') + '">continue</a>';
+    }
+  } catch (err) {
+    msg.textContent = 'Could not reach the server.';
+    btn.disabled = false;
+  }
+};
+</script>
+</body>
+</html>

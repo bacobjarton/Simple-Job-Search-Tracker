@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms of Service — Job Tracker</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="legal">
+<main>
+  <p><a href="/">← Job Tracker</a></p>
+  <h1>Terms of Service</h1>
+  <p class="muted">Last updated {{YEAR}}.</p>
+
+  <h2>The service</h2>
+  <p>Job Tracker is a hosted job-search notebook: applications, interviews, networking contacts, saved jobs, and an optional Role Fit analysis. It is a record-keeping tool. It does not apply to jobs for you, and a Role Fit verdict is not a promise that you will be interviewed or hired.</p>
+
+  <h2>Accounts</h2>
+  <p>You sign in with a magic link sent to your email, or with Google if the operator has turned that on. You are responsible for access to that inbox. One person per account. Do not share the sign-in link.</p>
+
+  <h2>Plans and limits</h2>
+  <p>The free plan includes up to 25 applications and a small monthly Role Fit quota (3 reads unless the operator has set a different number). A $19 pass lasts 90 days from purchase, or from the end of an unexpired pass. A $9 monthly subscription renews until you cancel it in the Stripe customer portal. Access continues through the end of the period you have paid for. The $49 lifetime offer, when it is on sale, is capped at 50 purchases and then turns off automatically. Paid plans remove the application cap and raise the Role Fit quota (100 reads per month unless configured otherwise). A per-person hourly limit and a site-wide daily cap still apply, so a single account cannot run the analyzer without bound.</p>
+  <p>Hitting a limit stops new work of that kind. It does not delete what you already saved. You can export or delete the account either way.</p>
+
+  <h2>Role Fit and Anthropic</h2>
+  <p>When you run Role Fit, the job posting you paste and the background you saved are sent to Anthropic to produce the analysis. Anthropic processes that text under its own terms. Do not paste a posting or a background you are not willing to send to that provider. Instructions hidden inside a posting are treated as untrusted data, not as commands, but you should still only submit material you are allowed to share.</p>
+
+  <h2>Payments</h2>
+  <p>Payments are processed by Stripe. We do not store card numbers. Test-mode deployments cannot create live charges. Subscriptions are managed in the Stripe customer portal, including cancellation. Except where the law requires a refund, pass and lifetime purchases are for the access described above.</p>
+
+  <h2>Your content</h2>
+  <p>You keep what you enter. You give the operator permission to store it and to send the Role Fit inputs to Anthropic when you ask for an analysis. Do not upload someone else's confidential information without the right to do so.</p>
+
+  <h2>Acceptable use</h2>
+  <p>Do not use the service to break the law, to probe other people's accounts, to overload the analyzer, or to send malware. The operator may suspend an account that does.</p>
+
+  <h2>Export and deletion</h2>
+  <p>You can download a JSON export of your data from the app, and you can delete the account from the Account page. Deletion removes your rows from this service. Details, including what Stripe and a lifetime sale record may still hold, are in the <a href="/privacy">Privacy policy</a>.</p>
+
+  <h2>Availability and warranty</h2>
+  <p>The service is provided as-is. It can be interrupted for maintenance, a bad deploy, or a provider outage. The operator is not liable for a missed follow-up, a lost opportunity, or decisions you make from a Role Fit read.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about these terms: {{PRIVACY_EMAIL}}.</p>
+</main>
+</body>
+</html>
