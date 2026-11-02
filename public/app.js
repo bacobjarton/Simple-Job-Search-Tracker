@@ -1742,18 +1742,18 @@ function rfProfilePanel(cfg, rf) {
   const editing = rf.editingProfile || (!cfg.has_profile && !fileBased);
   const out = [];
 
-  if (cfg.profile_error) {
+  if (cfg.unavailable) {
     out.push(`<div class="rf-unconfigured">
-      <strong>profile.js could not be loaded.</strong>
-      <div>${esc(cfg.profile_error)}</div>
-      <div class="muted">Fix the file, or save a background below and the app will use that instead.</div>
+      <strong>Role Fit is temporarily unavailable.</strong>
+      <div>Your tracker works as usual. Try again later.</div>
+      ${cfg.setup_hint ? `<div class="muted">${esc(cfg.setup_hint)}</div>` : ''}
     </div>`);
   }
-  if (!cfg.has_key) {
+  if (cfg.profile_error) {
     out.push(`<div class="rf-unconfigured">
-      <strong>No API key yet.</strong>
-      <div>Set <code>ANTHROPIC_API_KEY</code> in the environment and reload. Keys come from
-        <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>.</div>
+      <strong>The server profile could not be loaded.</strong>
+      <div>${esc(cfg.profile_error)}</div>
+      <div class="muted">Fix the file, or save a background below and the app will use that instead.</div>
     </div>`);
   }
   if (fileBased) {
@@ -1817,7 +1817,7 @@ async function renderRoleFit(main) {
           <span class="muted">Ctrl+Enter to run</span>
         </div>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-          <button class="btn" id="rfRun" ${cfg.configured ? '' : 'disabled'}>Analyze fit</button>
+          <button class="btn" id="rfRun" ${cfg.configured && !cfg.unavailable ? '' : 'disabled'}>Analyze fit</button>
           ${preview ? '<button class="btn ghost" id="rfPreview">Preview sample</button>' : ''}
           <button class="btn ghost" id="rfClear">Clear</button>
         </div>
@@ -1916,7 +1916,7 @@ async function renderRoleFit(main) {
       result.innerHTML = '<p class="muted">A score, the strengths, the gaps, and what to change on the resume show up here.</p>';
     }
     if (rf.error) {
-      result.innerHTML += `<div class="rf-error"><strong>That read did not finish.</strong> ${esc(rf.error)}</div>`;
+      result.innerHTML += `<div class="rf-error"><strong>That read did not finish.</strong> ${esc(rf.error)}${rf.adminHint ? `<div class="muted">${esc(rf.adminHint)}</div>` : ''}</div>`;
     }
     paintSave();
   };
@@ -1937,7 +1937,7 @@ async function renderRoleFit(main) {
     if (text.length > RF_MAX_CHARS) return toast('That posting is over the character limit');
     if (text.length < RF_MIN_CHARS) return toast('That is too short to read as a job description');
 
-    Object.assign(rf, { text, output: '', result: null, status: 'loading', error: null });
+    Object.assign(rf, { text, output: '', result: null, status: 'loading', error: null, adminHint: null });
     $('#rfRun').disabled = true;
     if (previewBtn) previewBtn.disabled = true;
     paint();
@@ -1955,6 +1955,7 @@ async function renderRoleFit(main) {
       const data = await res.json().catch(() => null);
       if (!res.ok || !data || data.ok === false) {
         rf.error = (data && data.error) || 'Something went wrong. Try again.';
+        rf.adminHint = data && data.admin_hint ? data.admin_hint : null;
         rf.status = 'error';
         paint();
         return;

@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const Database = require('better-sqlite3');
 const seed = require('./seed');
 const { JSON_OUTPUT_CONTRACT, analyzeFixture, parseAnalyzeResponse } = require('./analyze-format');
+let announcedMissingKey = false;
 
 const PORT = process.env.PORT || 3000;
 
@@ -1037,6 +1038,7 @@ backfillClosedDates();
 if (process.env.AUTH_PASSWORD) {
   console.warn('AUTH_PASSWORD is ignored. Sign-in is a magic link (and Google, when configured). Remove AUTH_PASSWORD.');
 }
+announceMissingAnalyzerKey();
 if (process.env.STRIPE_SECRET_KEY && !process.env.STRIPE_SECRET_KEY.startsWith('sk_test_')) {
   console.error('STRIPE_SECRET_KEY is not a test key. Checkout and webhooks that mutate plans are refused.');
 }
@@ -1577,6 +1579,22 @@ function dryRunAllowed() {
   return process.env.ANALYZE_DRY_RUN === '1' && process.env.NODE_ENV === 'test';
 }
 
+const ROLE_FIT_UNAVAILABLE = 'Role Fit is temporarily unavailable. Your tracker works as usual; try again later.';
+function analyzerKeyMissing() {
+  return !process.env.ANTHROPIC_API_KEY && !dryRunAllowed();
+}
+function announceMissingAnalyzerKey() {
+  if (!analyzerKeyMissing() || announcedMissingKey) return;
+  announcedMissingKey = true;
+  console.error('Role Fit is unavailable: ANTHROPIC_API_KEY is not set.');
+}
+function unavailableResponse(res, user, logMessage, adminHint) {
+  console.error(logMessage);
+  const body = { error: ROLE_FIT_UNAVAILABLE };
+  if (user && user.is_admin && adminHint) body.admin_hint = adminHint;
+  return res.status(503).json(body);
+}
+
 function loadFileProfile() {
   profileLoadError = null;
   if (!fileProfileEnabled()) return null;
@@ -1687,13 +1705,20 @@ function quotaSnapshot(user) {
 app.get('/api/analyze/status', (req, res) => {
   const profile = loadAnalyzerProfile(req.user.id);
   const hasKey = !!process.env.ANTHROPIC_API_KEY || dryRunAllowed();
+  const missingKey = analyzerKeyMissing();
+  if (missingKey) announceMissingAnalyzerKey();
+  const admin = !!req.user.is_admin;
   res.json({
     configured: !!(hasKey && profile),
     has_profile: !!profile,
-    has_key: !!process.env.ANTHROPIC_API_KEY || dryRunAllowed(),
+    has_key: hasKey,
+    unavailable: missingKey,
     fixture_preview: process.env.NODE_ENV !== 'production',
-    profile_source: profile ? profile.source : null,
-    profile_error: fileProfileEnabled() ? profileLoadError : null,
+    profile_source: admin && profile ? profile.source : (profile && profile.source !== 'file' ? profile.source : null),
+    profile_error: admin && fileProfileEnabled() ? profileLoadError : null,
+    setup_hint: admin && missingKey
+      ? 'Set ANTHROPIC_API_KEY in the environment and reload. Keys come from console.anthropic.com.'
+      : null,
     min_chars: ANALYZE_MIN_CHARS,
     max_chars: ANALYZE_MAX_CHARS,
     profile_min_chars: PROFILE_MIN_CHARS,
@@ -1783,8 +1808,14 @@ app.post('/api/analyze', asyncRoute(async (req, res) => {
     return fail(res, 400, `That posting is ${raw.length.toLocaleString()} characters and the limit is ${ANALYZE_MAX_CHARS.toLocaleString()}. Trim it to the responsibilities and requirements.`);
   }
   const wantFixture = !!(req.body && req.body.fixture === true && process.env.NODE_ENV !== 'production');
-  if (!wantFixture && !dryRunAllowed() && !process.env.ANTHROPIC_API_KEY) {
-    return fail(res, 503, 'ANTHROPIC_API_KEY is not set, so the analyzer cannot run.');
+  if (!wantFixture && analyzerKeyMissing()) {
+    announceMissingAnalyzerKey();
+    return unavailableResponse(
+      res,
+      req.user,
+      'Role Fit request refused: ANTHROPIC_API_KEY is not set.',
+      'Set ANTHROPIC_API_KEY in the environment and reload.'
+    );
   }
 
   let usageId;
@@ -1806,7 +1837,7 @@ app.post('/api/analyze', asyncRoute(async (req, res) => {
     Anthropic = require('@anthropic-ai/sdk');
   } catch (e) {
     releaseAnalyze(usageId);
-    return fail(res, 503, 'The @anthropic-ai/sdk package is not installed. Run npm install.');
+    return unavailableResponse(res, req.user, 'Role Fit: the @anthropic-ai/sdk package is not installed.', 'Install dependencies with npm install, then reload.');
   }
 
   const sanitized = raw.replace(/<\/?job_description>/gi, '');
@@ -1829,10 +1860,10 @@ app.post('/api/analyze', asyncRoute(async (req, res) => {
   } catch (e) {
     releaseAnalyze(usageId);
     console.error('analyze: model call failed', e.message);
-    const status = e && e.status === 401 ? 401 : 502;
-    return fail(res, status, status === 401
-      ? 'The Anthropic API key was rejected. Check ANTHROPIC_API_KEY.'
-      : 'The model call failed. Try again in a moment.');
+    if (e && e.status === 401) {
+      return unavailableResponse(res, req.user, 'Role Fit: the Anthropic API key was rejected.', 'The Anthropic API key was rejected. Check ANTHROPIC_API_KEY.');
+    }
+    return fail(res, 502, 'The model call failed. Try again in a moment.');
   }
 
   let text = '';

@@ -617,3 +617,58 @@ test('isolation, plan limits, and Stripe webhook', async () => {
     server.stop();
   }
 });
+
+test('a missing analyzer key is not shown to customers', async () => {
+  const appJs = fs.readFileSync(path.join(ROOT, 'public/app.js'), 'utf8');
+  assert.equal(appJs.includes('No API key yet'), false);
+  assert.equal(appJs.includes('console.anthropic.com'), false);
+  assert.equal(appJs.includes('ANTHROPIC_API_KEY'), false);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tracker-nokey-'));
+  const port = await freePort();
+  const base = `http://127.0.0.1:${port}`;
+  const server = await startServer({
+    PORT: String(port),
+    DATA_DIR: dir,
+    SEED_DEMO: '0',
+    NODE_ENV: 'development',
+    COOKIE_SECURE: '0',
+    APP_BASE_URL: base,
+    AUTH_DEBUG_RETURN_LINK: '1',
+    EMAIL_PROVIDER: 'console',
+    ADMIN_EMAIL: 'admin@example.com',
+  });
+  const background = ('Customer success lead who writes SQL and renewal plans. ').repeat(6);
+  const posting = ('We need a product manager who writes SQL and talks to customers every week. ').repeat(3);
+  try {
+    assert.match(server.log(), /ANTHROPIC_API_KEY is not set/);
+    const reader = await signIn(base, 'reader@example.com');
+    const status = await request(base, reader, 'GET', '/api/analyze/status');
+    assert.equal(status.status, 200, status.text);
+    assert.equal(status.json.unavailable, true);
+    assert.equal(status.json.has_key, false);
+    assert.equal(status.json.configured, false);
+    assert.equal(status.json.fixture_preview, true);
+    assert.equal(status.json.setup_hint, null);
+    assert.equal(JSON.stringify(status.json).includes('ANTHROPIC_API_KEY'), false);
+    assert.equal(JSON.stringify(status.json).includes('console.anthropic'), false);
+
+    await request(base, reader, 'PUT', '/api/profile', { profile_text: background });
+    const blocked = await request(base, reader, 'POST', '/api/analyze', { jobDescription: posting });
+    assert.equal(blocked.status, 503, blocked.text);
+    assert.match(blocked.json.error, /temporarily unavailable/);
+    assert.equal(blocked.json.admin_hint, undefined);
+    assert.equal(blocked.text.includes('ANTHROPIC_API_KEY'), false);
+
+    const preview = await request(base, reader, 'POST', '/api/analyze', { jobDescription: posting, fixture: true });
+    assert.equal(preview.status, 200, preview.text);
+    assert.equal(preview.json.result.fixture, true);
+
+    const admin = await signIn(base, 'admin@example.com');
+    const adminStatus = await request(base, admin, 'GET', '/api/analyze/status');
+    assert.match(adminStatus.json.setup_hint, /ANTHROPIC_API_KEY/);
+    assert.match(adminStatus.json.setup_hint, /console\.anthropic\.com/);
+  } finally {
+    server.stop();
+  }
+});
