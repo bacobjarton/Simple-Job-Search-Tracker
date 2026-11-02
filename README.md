@@ -1,4 +1,4 @@
-# Job Tracker
+# TallyJobs
 
 A hosted, multi-user job search tracker: applications, interview rounds, networking contacts, and a dashboard that tells you what to do today. Node.js 20 + Express + SQLite on the back end, a dependency-free vanilla-JS app on the front end. Sign-in is an email magic link (and Google, when configured). Plans, Role Fit quotas, and Stripe billing are enforced on the server.
 
@@ -113,7 +113,7 @@ Every job-search row is stored with `user_id`. Reads, writes, export, and import
 | `SEED_DEMO_EMAIL` | Demo account. Default `demo@localhost`. |
 | `EMAIL_PROVIDER` | `console` (default), `resend`, or `webhook`. If unset and `RESEND_API_KEY` is set, provider is `resend`. |
 | `RESEND_API_KEY` | Resend API key. |
-| `EMAIL_FROM` | From address Resend will accept, for example `Job Tracker <hello@yourdomain.com>`. |
+| `EMAIL_FROM` | From address Resend will accept, for example `TallyJobs <hello@tallyjobs.app>`. |
 | `EMAIL_WEBHOOK_URL` | JSON POST target when `EMAIL_PROVIDER=webhook`. Body is `{ to, subject, text, html }`. |
 | `EMAIL_WEBHOOK_TOKEN` | Optional bearer token for that webhook. |
 | `AUTH_DEBUG_RETURN_LINK` | `1` returns the magic link in the login response. Ignored when `NODE_ENV=production`. |
@@ -147,9 +147,9 @@ Every job-search row is stored with `user_id`. Reads, writes, export, and import
 
 Create these in the Stripe **test mode** dashboard. Do not use live mode; the server rejects `sk_live_` keys and `livemode: true` webhooks.
 
-1. **Product** "Job Tracker 90-day pass". One-time price, **$19.00 USD**. Copy the price id into `STRIPE_PRICE_PASS`.
-2. **Product** "Job Tracker Monthly". Recurring price, **$9.00 USD / month**. Copy the price id into `STRIPE_PRICE_SUBSCRIPTION`.
-3. **Product** "Job Tracker Lifetime" (optional). One-time price, **$49.00 USD**. Copy the price id into `STRIPE_PRICE_LIFETIME`. Leave it unset and the offer stays disabled. The app stops selling it after `LIFETIME_DEAL_LIMIT` completed checkouts (default 50).
+1. **Product** "TallyJobs 90-day pass". One-time price, **$19.00 USD**. Copy the price id into `STRIPE_PRICE_PASS`.
+2. **Product** "TallyJobs monthly". Recurring price, **$9.00 USD / month**. Copy the price id into `STRIPE_PRICE_SUBSCRIPTION`.
+3. **Product** "TallyJobs lifetime" (optional). One-time price, **$49.00 USD**. Copy the price id into `STRIPE_PRICE_LIFETIME`. Leave it unset and the offer stays disabled. The app stops selling it after `LIFETIME_DEAL_LIMIT` completed checkouts (default 50).
 4. **Customer portal**: Settings → Billing → Customer portal, enable it in test mode so "Billing portal" can cancel a subscription.
 5. **Webhook** endpoint `https://YOUR_DOMAIN/api/stripe/webhook`. Subscribe to:
    - `checkout.session.completed`

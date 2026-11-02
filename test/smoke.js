@@ -456,7 +456,12 @@ test('isolation, plan limits, and Stripe webhook', async () => {
     await request(base, alice, 'PUT', '/api/profile', { profile_text: BACKGROUND });
     const fit1 = await analyze(alice);
     assert.equal(fit1.status, 200, fit1.text);
-    assert.match(fit1.text, /VERDICT/);
+    assert.equal(fit1.json.ok, true);
+    assert.equal(fit1.json.result.verdict, 'Partial fit');
+    assert.equal(fit1.json.result.score, 58);
+    assert.ok(fit1.json.result.strengths.length >= 3);
+    assert.ok(fit1.json.result.gaps.length >= 3);
+    assert.equal(fit1.json.result.fixture, true);
     const meAfter = await request(base, alice, 'GET', '/api/billing/status');
     assert.equal(meAfter.json.usage.analyze_input_tokens, 11);
     assert.equal(meAfter.json.usage.analyze_output_tokens, 22);

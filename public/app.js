@@ -1,4 +1,4 @@
-/* Job Application Tracker — vanilla JS SPA */
+/* TallyJobs — vanilla JS app */
 (function () {
 'use strict';
 
@@ -13,11 +13,11 @@ const NET_STATUSES = ['Active', 'Dormant', 'Awaiting Reply', 'Closed'];
 const EVENT_TYPES = ['Applied', 'Recruiter Screen', 'Interview', 'Follow-up', 'Offer', 'Rejection', 'Note', 'Status Change'];
 
 const STATUS_COLORS = {
-  'In Progress': '#3b82f6', 'Offer Received': '#22c55e', 'Rejected': '#ef4444',
-  'Withdrawn': '#6b7280', 'Never Heard Back': '#f97316'
+  'In Progress': '#1d4ed8', 'Offer Received': '#0f6e56', 'Rejected': '#b42318',
+  'Withdrawn': '#57534e', 'Never Heard Back': '#c2410c'
 };
-const PRIORITY_COLORS = { 'High': '#f43f5e', 'Medium': '#f59e0b', 'Low': '#64748b' };
-const NET_COLORS = { 'Active': '#22c55e', 'Awaiting Reply': '#eab308', 'Dormant': '#6b7280', 'Closed': '#64748b' };
+const PRIORITY_COLORS = { 'High': '#be123c', 'Medium': '#b45309', 'Low': '#57534e' };
+const NET_COLORS = { 'Active': '#0f6e56', 'Awaiting Reply': '#a16207', 'Dormant': '#57534e', 'Closed': '#57534e' };
 
 const NAV = [
   { route: 'dashboard', label: 'Dashboard', ico: '📊' },
@@ -25,7 +25,7 @@ const NAV = [
   { route: 'saved', label: 'Saved Jobs', ico: '🔖' },
   { route: 'networking', label: 'Networking', ico: '🤝' },
   { route: 'interviews', label: 'Interviews', ico: '🎤' },
-  { route: 'rolefit', label: 'Role Fit', ico: '🎯' },
+  { route: 'rolefit', label: 'Role Fit', ico: '◎' },
   { route: 'insights', label: 'Insights', ico: '📈' },
 ];
 
@@ -51,7 +51,7 @@ const S = {
   velMetric: localStorage.getItem('velMetric') || 'apps',
   velRange: localStorage.getItem('velRange') || '12w',
   velStyle: localStorage.getItem('velStyle') || 'bar',
-  rf: { text: '', output: '', status: 'idle', error: null, config: null, profile: null, editingProfile: false },
+  rf: { text: '', output: '', result: null, status: 'idle', error: null, config: null, profile: null, editingProfile: false },
   suggestCollapsed: localStorage.getItem('suggestCollapsed') === '1',
   suggestShowAll: localStorage.getItem('suggestShowAll') === '1',
 };
@@ -977,8 +977,8 @@ function renderDrawer() {
 
     ${a.fit_analysis ? `
     <section>
-      <h3>Role Fit Read ${a.fit_analysis_date ? `<span class="muted" style="text-transform:none;letter-spacing:0">— ${fmtDate(a.fit_analysis_date)}</span>` : ''}</h3>
-      <div class="rf-result">${rfRenderResult(rfParse(a.fit_analysis))}</div>
+      <h3>Role Fit ${a.fit_analysis_date ? `<span class="muted" style="text-transform:none;letter-spacing:0">— ${fmtDate(a.fit_analysis_date)}</span>` : ''}</h3>
+      <div class="rf-result">${renderStoredFit(a.fit_analysis)}</div>
       <button class="btn ghost sm" id="clearFit" style="margin-top:10px">Remove this read</button>
     </section>` : ''}
 
@@ -1611,8 +1611,78 @@ async function renderInsights(main) {
 
 // ---------------- role fit analyzer ----------------
 
-// Parses the analyzer's plain-text contract. Runs on every streamed chunk, so
-// it has to tolerate a half-written response.
+function fitTone(score, verdict) {
+  if ((verdict || '').toLowerCase().includes('not a job')) return '#57534e';
+  if (score == null || score === '') return '#57534e';
+  if (score >= 70) return '#0f6e56';
+  if (score >= 45) return '#b45309';
+  return '#b42318';
+}
+function fitPoints(list) {
+  return (list || []).map(p => `
+    <div class="fit-point">
+      <strong>${esc(p.title || '')}</strong>
+      ${p.detail ? `<p>${esc(p.detail)}</p>` : ''}
+    </div>`).join('');
+}
+function fitRing(result) {
+  const score = result.score;
+  const r = 46;
+  const c = 2 * Math.PI * r;
+  const offset = score == null ? c : c * (1 - Math.max(0, Math.min(100, score)) / 100);
+  const label = score == null ? '—' : String(score);
+  const tone = fitTone(score, result.verdict);
+  return `
+    <div class="fit-ring" role="img" aria-label="${esc((score == null ? 'No score' : 'Fit score ' + score) + ', ' + (result.verdict || ''))}">
+      <svg viewBox="0 0 120 120" aria-hidden="true">
+        <circle class="track" cx="60" cy="60" r="${r}"></circle>
+        <circle class="value" cx="60" cy="60" r="${r}" style="stroke:${tone};stroke-dasharray:${c.toFixed(2)};stroke-dashoffset:${offset.toFixed(2)}"></circle>
+      </svg>
+      <div class="fit-ring-label"><strong>${esc(label)}</strong><span>${esc(result.verdict || '')}</span></div>
+    </div>`;
+}
+function renderFitCard(result) {
+  if (!result) return '';
+  const strengths = fitPoints(result.strengths);
+  const gaps = fitPoints(result.gaps);
+  const steps = (result.next_steps || []).map(s => `<li><strong>${esc(s.title || '')}</strong>${s.detail ? `<div class="muted">${esc(s.detail)}</div>` : ''}</li>`).join('');
+  const keywords = (result.keywords || []).map(k => `<span class="tag-chip">${esc(k)}</span>`).join('');
+  const sections = (result.sections || []).map(s => `
+    <details class="fit-detail">
+      <summary>${esc(s.title || 'Detail')}</summary>
+      <p>${esc(s.body || '')}</p>
+    </details>`).join('');
+  return `
+    <div class="fit-hero">
+      ${fitRing(result)}
+      <p class="fit-summary">${esc(result.summary || '')}</p>
+    </div>
+    ${(strengths || gaps) ? `<div class="fit-cols">
+      <div class="fit-col"><h4>Strengths</h4>${strengths || '<p class="muted">None called out.</p>'}</div>
+      <div class="fit-col"><h4>Gaps</h4>${gaps || '<p class="muted">None called out.</p>'}</div>
+    </div>` : ''}
+    ${steps ? `<h4 class="fit-col" style="margin:16px 0 0">Next steps</h4><ul class="fit-steps">${steps}</ul>` : ''}
+    ${keywords ? `<h4 class="fit-col" style="margin:16px 0 0">Keywords to mirror</h4><div class="fit-kw">${keywords}</div>` : ''}
+    ${sections}`;
+}
+function renderStoredFit(raw) {
+  if (!raw) return '';
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && (parsed.verdict || parsed.summary || parsed.strengths)) return renderFitCard(parsed);
+  } catch (e) { /* older plain-text reads */ }
+  return rfRenderResult(rfParse(raw));
+}
+function fitLoading() {
+  return `<div class="fit-loading" role="status">
+    <div class="fit-skel lg"></div>
+    <p>Reading the posting against your background…</p>
+    <div class="fit-skel"></div>
+    <div class="fit-skel" style="width:70%"></div>
+  </div>`;
+}
+
+// Older saved reads are plain text. New reads are JSON and use renderFitCard.
 function rfParse(raw) {
   const blocks = [];
   let verdict = null, summaryParts = [], readingSummary = false;
@@ -1722,6 +1792,8 @@ async function renderRoleFit(main) {
   }
   const cfg = S.rf.config;
   const rf = S.rf;
+  const preview = !!(cfg && cfg.fixture_preview);
+  const canType = !!(cfg && (cfg.configured || preview));
 
   // Anything analyzed can be filed against an application or a saved job.
   const targets = [
@@ -1734,19 +1806,19 @@ async function renderRoleFit(main) {
       <div class="panel">
         <h3>Job description</h3>
         <p class="muted" style="margin:-4px 0 10px;font-size:12.5px">
-          Paste the posting. The analyzer reads it against your background and is told to name the gaps as plainly as the matches.
-          The posting and your saved background are sent to Anthropic to produce this read.
+          Paste the posting. TallyJobs sends it, and the background you saved, to Anthropic on the server. The key never reaches this page.
           ${cfg.quota ? `<br>${cfg.quota.monthly_used} of ${cfg.quota.monthly_limit} reads used this month.` : ''}
         </p>
         ${rfProfilePanel(cfg, rf)}
-        <textarea id="rfInput" rows="16" placeholder="Paste the full job description here, including responsibilities and requirements."
-          ${cfg.configured ? '' : 'disabled'}>${esc(rf.text)}</textarea>
+        <textarea id="rfInput" rows="12" placeholder="Paste the full job description here, including responsibilities and requirements."
+          ${canType ? '' : 'disabled'}>${esc(rf.text)}</textarea>
         <div class="rf-meta">
           <span id="rfCount" class="muted"></span>
           <span class="muted">Ctrl+Enter to run</span>
         </div>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
           <button class="btn" id="rfRun" ${cfg.configured ? '' : 'disabled'}>Analyze fit</button>
+          ${preview ? '<button class="btn ghost" id="rfPreview">Preview sample</button>' : ''}
           <button class="btn ghost" id="rfClear">Clear</button>
         </div>
       </div>
@@ -1807,7 +1879,7 @@ async function renderRoleFit(main) {
     const n = input.value.trim().length;
     const over = n > RF_MAX_CHARS;
     $('#rfCount').textContent = `${n.toLocaleString()} / ${RF_MAX_CHARS.toLocaleString()} characters`;
-    $('#rfCount').style.color = over ? '#fb923c' : '';
+    $('#rfCount').style.color = over ? '#c2410c' : '';
   };
 
   const paintSave = () => {
@@ -1827,22 +1899,24 @@ async function renderRoleFit(main) {
       if (!v) return toast('Pick where to save it first');
       const [kind, id] = v.split(':');
       const url = (kind === 'app' ? '/api/applications/' : '/api/saved-jobs/') + id;
-      await api('PUT', url, { fit_analysis: rf.output, fit_analysis_date: todayISO() });
+      await api('PUT', url, { fit_analysis: rf.result ? JSON.stringify(rf.result) : rf.output, fit_analysis_date: todayISO() });
       toast('Saved to record');
       await loadAll();
     };
   };
 
   const paint = () => {
-    if (rf.status === 'idle' && !rf.output) {
-      result.innerHTML = '<p class="muted">The assessment appears here: an overall fit read, where the role lines up with what you have done, where you would be ramping, and what to raise first.</p>';
-    } else if (rf.status === 'loading') {
-      result.innerHTML = '<p class="muted">Reading the posting…</p>';
-    } else {
+    if (rf.status === 'loading') {
+      result.innerHTML = fitLoading();
+    } else if (rf.result) {
+      result.innerHTML = renderFitCard(rf.result);
+    } else if (rf.output) {
       result.innerHTML = rfRenderResult(rfParse(rf.output));
+    } else {
+      result.innerHTML = '<p class="muted">A score, the strengths, the gaps, and what to change on the resume show up here.</p>';
     }
     if (rf.error) {
-      result.innerHTML += `<div class="rf-error"><strong>Not this time.</strong> ${esc(rf.error)}</div>`;
+      result.innerHTML += `<div class="rf-error"><strong>That read did not finish.</strong> ${esc(rf.error)}</div>`;
     }
     paintSave();
   };
@@ -1850,55 +1924,43 @@ async function renderRoleFit(main) {
   input.oninput = () => { rf.text = input.value; paintCount(); };
   input.onkeydown = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run(); } };
   $('#rfClear').onclick = () => {
-    Object.assign(rf, { text: '', output: '', status: 'idle', error: null });
+    Object.assign(rf, { text: '', output: '', result: null, status: 'idle', error: null });
     input.value = ''; paintCount(); paint();
   };
-  $('#rfRun').onclick = () => run();
+  $('#rfRun').onclick = () => run(false);
+  const previewBtn = $('#rfPreview');
+  if (previewBtn) previewBtn.onclick = () => run(true);
 
-  async function run() {
+  async function run(asFixture) {
     const text = input.value.trim();
     if (!text) return toast('Paste a job description first');
     if (text.length > RF_MAX_CHARS) return toast('That posting is over the character limit');
     if (text.length < RF_MIN_CHARS) return toast('That is too short to read as a job description');
 
-    Object.assign(rf, { text, output: '', status: 'loading', error: null });
+    Object.assign(rf, { text, output: '', result: null, status: 'loading', error: null });
     $('#rfRun').disabled = true;
+    if (previewBtn) previewBtn.disabled = true;
     paint();
 
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken() },
-        body: JSON.stringify({ jobDescription: text }),
+        body: JSON.stringify({ jobDescription: text, fixture: !!asFixture }),
       });
       if (res.status === 401) {
         location.href = '/login?next=' + encodeURIComponent(location.pathname + location.hash);
         return;
       }
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data || data.ok === false) {
         rf.error = (data && data.error) || 'Something went wrong. Try again.';
         rf.status = 'error';
         paint();
         return;
       }
-      rf.status = 'streaming';
-      const reader = res.body.getReader(), decoder = new TextDecoder();
-      let acc = '';
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        acc += decoder.decode(value, { stream: true });
-        if (acc.endsWith(RF_STREAM_ERROR)) {
-          rf.output = acc.slice(0, -RF_STREAM_ERROR.length);
-          rf.error = 'The response was cut off partway through. What is above is incomplete.';
-          rf.status = 'error';
-          paint();
-          return;
-        }
-        rf.output = acc;
-        paint();
-      }
+      rf.result = data.result;
+      rf.output = '';
       rf.status = 'done';
       paint();
     } catch (e) {
@@ -1908,6 +1970,7 @@ async function renderRoleFit(main) {
     } finally {
       const btn = $('#rfRun');
       if (btn) btn.disabled = !cfg.configured;
+      if (previewBtn) previewBtn.disabled = false;
     }
   }
 

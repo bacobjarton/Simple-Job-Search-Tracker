@@ -1,4 +1,4 @@
-# Job Application Tracker — PUBLIC demo
+# TallyJobs — PUBLIC demo
 
 This repository is **public and MIT-licensed**. It is a portfolio/demo build of
 the job tracker, and everything in it is safe to share.

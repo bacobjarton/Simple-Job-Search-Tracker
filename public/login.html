@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0f172a">
-<title>Sign in — Job Tracker</title>
+<meta name="theme-color" content="#f3f0e8">
+<title>Sign in — TallyJobs</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body class="auth-body">
 <main class="auth-card">
-  <a class="brand" href="/">🎯 <span>Job Tracker</span></a>
+  <a class="wordmark" href="/"><img src="/icon.svg" width="28" height="28" alt="">TallyJobs</a>
   <h1>Sign in</h1>
   <p class="muted">We email you a link. It expires in 15 minutes and works once. No password.</p>
   <form id="form">
@@ -24,7 +24,7 @@
   <div id="googleWrap" hidden>
     <a class="btn ghost" id="google" href="/api/auth/google">Continue with Google</a>
   </div>
-  <p class="fine">By continuing you agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy</a> policy. Job postings and the background you save for Role Fit are sent to Anthropic when you run an analysis.</p>
+  <p class="fine">By continuing you agree to the <a href="/terms">Terms</a> and <a href="/privacy">Privacy</a> policy. Job postings and the background you save for Role Fit are sent to Anthropic when you run an analysis. The API key stays on the server.</p>
 </main>
 <script>
 const params = new URLSearchParams(location.search);
