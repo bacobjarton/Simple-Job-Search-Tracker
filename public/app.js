@@ -1014,7 +1014,27 @@ function renderDrawer() {
     if (S.route === 'applications') refreshListBehindDrawer();
     else if (S.route === 'dashboard') loadDash().then(() => renderDashboard($('#main')));
   };
-  $$('#drawer [data-field]').forEach(el => el.onchange = () => saveField(el));
+  // A date input fires `change` on every intermediate value while the year is
+  // typed: 2026 arrives as 0002, 0020, 0202, 2026. Saving each one re-rendered
+  // the list behind the drawer mid-keystroke, which made the year impossible to
+  // finish typing. Debounce dates, commit on blur, and never store a stray year.
+  const DATE_SAVE_DELAY = 700;
+  let dateTimer = null;
+  const saneDate = (v) =>
+    v === '' || (/^\d{4}-\d{2}-\d{2}$/.test(v) && +v.slice(0, 4) >= 1900 && +v.slice(0, 4) <= 2200);
+
+  $$('#drawer [data-field]').forEach(el => {
+    if (el.type !== 'date') { el.onchange = () => saveField(el); return; }
+    el.dataset.saved = el.value;
+    const commit = () => {
+      clearTimeout(dateTimer);
+      if (el.value === el.dataset.saved || !saneDate(el.value)) return;
+      el.dataset.saved = el.value;
+      saveField(el);
+    };
+    el.onchange = () => { clearTimeout(dateTimer); dateTimer = setTimeout(commit, DATE_SAVE_DELAY); };
+    el.onblur = commit;
+  });
   $('#saveAll').onclick = () => { toast('Saved'); };
 
   $('#deleteApp').onclick = async () => {
